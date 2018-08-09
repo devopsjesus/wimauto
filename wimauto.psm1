@@ -1,5 +1,4 @@
-﻿
-<#
+﻿<#
     .SYNOPSIS
         Copies the Windows image (install.wim) from a Windows Server ISO.
 
