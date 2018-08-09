@@ -1,4 +1,25 @@
-﻿function Copy-WimFromISO
+﻿
+<#
+    .SYNOPSIS
+        Copies the Windows image (install.wim) from a Windows Server ISO.
+
+    .DESCRIPTION
+        Copies $:\sources\install.wim from a Windows Server ISO to a specified local path.
+
+    .PARAMETER IsoPath
+        Path to the target Windows Server ISO.
+
+    .PARAMETER WimDestinationPath
+        Full path to which the Windows image will be copied.
+
+    .Example
+        $copyWimParams = @{
+            IsoPath            = "$workspacePath\osimages\win16\en_windows_server_2016_x64_dvd_11636701.iso"
+            WimDestinationPath = "$workspacePath\osimages\win16\install.wim"
+        }
+        Copy-WimFromISO @copyWimParams
+#>
+function Copy-WimFromISO
 {
     param(
         [parameter(Mandatory)]
@@ -7,7 +28,6 @@
         $IsoPath,
 
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
         [string]
         $WimDestinationPath
     )
@@ -23,6 +43,40 @@
     Dismount-DiskImage -ImagePath $IsoPath
 }
 
+<#
+    .SYNOPSIS
+        Installs a list of updates to a specified image.
+
+    .DESCRIPTION
+        Mounts a Windows image (.Wim file), and applies a list of specified updates gathered from a WSUS server.
+        Update installation success is appended to a file on the root of the mounted image to keep a record of 
+        updates applied to the image.
+
+    .PARAMETER WimPath
+        Path to set as the desired WSUS Update repository.
+
+    .PARAMETER ImageIndex
+        A number (acceptable range "1-9") to specify which image index to apply.
+
+    .PARAMETER ImageMountPath
+        Directory to which the image will be mounted.
+
+    .PARAMETER WsusRepoDirectory
+        Path to set as the desired WSUS Update repository.
+
+    .PARAMETER ServerVersion
+        Choose either Windows Server 2016 or 2012 as the product version to return updates.
+
+    .Example
+        $updateWimParams = @{
+            WimPath           = "$workspacePath\osimages\win16\install.wim"
+            ImageIndex        = 1
+            ImageMountPath    = "$workspacePath\osimages\mount"
+            WsusRepoDirectory = "$workspacePath\updaterepo"
+            ServerVersion     = "Windows Server 2016"
+        }
+        Install-UpdateListToWim @updateWimParams -Verbose
+#>
 function Install-UpdateListToWim
 {
     param(
@@ -32,6 +86,7 @@ function Install-UpdateListToWim
         $WimPath,
 
         [parameter(Mandatory)]
+        [ValidatePattern("[1-9]")]
         [int]
         $ImageIndex,
 
@@ -91,6 +146,23 @@ function Install-UpdateListToWim
     Dismount-WindowsImage -Path $ImageMountPath -Save -LogPath $wimLogPath -Append -LogLevel Errors
 }
 
+<#
+    .SYNOPSIS
+        Returns a list of the approved & self-contained updates' file paths.
+
+    .DESCRIPTION
+        Returns an array of hashtables containing the ID and filepath of all approved, self-contained
+        updates for Windows Server 2016 or 2012.
+
+    .PARAMETER WsusRepoDirectory
+        Path to set as the desired WSUS Update repository.
+
+    .PARAMETER ServerVersion
+        Choose either Windows Server 2016 or 2012 as the product version to return updates.
+
+    .Example
+        Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updaterepo" -ServerVersion "Windows Server 2016"
+#>
 function Get-SelfContainedApprovedUpdateFileList
 {
     param(
@@ -194,7 +266,6 @@ function New-VhdxFromWim
         $LocalVhdPath,
     
         [parameter(Mandatory)]
-        #[ValidatePattern("[2-9][0-9]GB|[1-9][0-9][0-9]GB")]
         [double]
         $VhdSize,
 
