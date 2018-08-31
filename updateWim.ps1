@@ -1,6 +1,6 @@
 ﻿#requires -RunAsAdministrator
-$workspacePath = "$env:USERPROFILE\Desktop\ngenbuild"
-$WimAutoModulePath = "$workspacePath\modules\wimauto\wimauto.psd1"
+$workspacePath = "$env:USERPROFILE\Desktop\wimauto"
+$WimAutoModulePath = "$workspacePath\wimauto.psd1"
 
 #region Modules
 Get-Module wimauto | Remove-Module -ErrorAction Ignore
