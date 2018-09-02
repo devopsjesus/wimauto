@@ -27,19 +27,29 @@ function Copy-WimFromISO
         $IsoPath,
 
         [parameter(Mandatory)]
+        [ValidatePattern(".*\.wim$")]
         [string]
         $WimDestinationPath
     )
 
-    Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop
+    $wimParentPath = Split-Path -Path $WimDestinationPath -Parent
 
-    $mountedDiskImageLetter = (Get-Volume).where({$_.FileSystem -eq "UDF"}).DriveLetter
+    if (! (Test-Path $wimParentPath))
+    {
+        New-Item -Path $wimParentPath -ItemType Directory -Force -ErrorAction Stop
+    }
 
-    Copy-Item -Path "${mountedDiskImageLetter}:\sources\install.wim" -Destination $WimDestinationPath -Force -ErrorAction Stop
-
-    Set-ItemProperty $WimDestinationPath -Name "IsReadOnly" -Value $false
-
-    Dismount-DiskImage -ImagePath $IsoPath
+    $mountResult = Mount-DiskImage $IsoPath -PassThru -StorageType ISO -ErrorAction Stop | Get-Volume
+    $sourceWimPath = "$($mountResult.DriveLetter):\sources\install.wim"
+    try
+    {
+        $null = & xcopy.exe $sourceWimPath $wimParentPath /R /Y /J
+        Set-ItemProperty $WimDestinationPath -Name "IsReadOnly" -Value $false
+    }
+    finally
+    {
+        Dismount-DiskImage -ImagePath $IsoPath
+    }
 }
 
 <#
@@ -110,10 +120,10 @@ function Install-UpdateListToWim
 
     if (! (Test-Path $ImageMountPath))
     {
-        New-Item -Path $ImageMountPath -ItemType "Directory" -ErrorAction Stop
+        $null = New-Item -Path $ImageMountPath -ItemType "Directory" -ErrorAction Stop
     }
 
-    Mount-WindowsImage -ImagePath $WimPath -Index $ImageIndex -Path $ImageMountPath -ErrorAction Stop
+    $null = Mount-WindowsImage -ImagePath $WimPath -Index $ImageIndex -Path $ImageMountPath -ErrorAction Stop
     
     $updateFileList = Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory $WsusRepoDirectory -ServerVersion $ServerVersion
 
@@ -122,8 +132,8 @@ function Install-UpdateListToWim
         Write-Verbose "Adding Update $($update.ID) from $($update.FilePath) to image path $ImageMountPath"
         try
         {
-            Add-WindowsPackage -PackagePath $update.FilePath -Path $ImageMountPath -WarningAction Ignore
-            "Update $($update.ID) added successfully" >> $logname
+            $null = Add-WindowsPackage -PackagePath $update.FilePath -Path $ImageMountPath -WarningAction Ignore
+            "Update $($update.ID) added successfully" >> $logPath
         }
         catch
         {
@@ -131,18 +141,18 @@ function Install-UpdateListToWim
 
             if ($packageError.Exception.Message.Contains("0x800f081e"))
             {
-                "Update $($update.ID) not applicable" >> $logname
+                "Update $($update.ID) not applicable" >> $logPath
             }
             else
             {
-                "Update $($update.ID) not added. Error: $packageError" >> $logname
+                "Update $($update.ID) not added. Error: $packageError" >> $logPath
             }
         }
     }
 
     $wimLogPath = Join-Path -Path (Split-Path -Path $WimPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
 
-    Dismount-WindowsImage -Path $ImageMountPath -Save -LogPath $wimLogPath -Append -LogLevel Errors
+    $null = Dismount-WindowsImage -Path $ImageMountPath -Save -LogPath $wimLogPath -Append -LogLevel Errors
 }
 
 <#
@@ -273,19 +283,9 @@ function New-VhdxFromWim
         [string]
         $VHDDType,
 
-        [parameter(Mandatory)]
-        [ValidatePattern("[a-zA-Z]")]
+        [parameter()]
         [string]
-        $BootDriveLetter,
-
-        [parameter(Mandatory)]
-        [ValidatePattern("[a-zA-Z]")]
-        [string]
-        $OSDriveLetter,
-
-        [parameter(Mandatory)]
-        [string]
-        $WindowsVolumeLabel,
+        $WindowsVolumeLabel = "OSDrive",
 
         [parameter(Mandatory)]
         [ValidateScript({Test-Path $_})]
@@ -300,6 +300,10 @@ function New-VhdxFromWim
         [parameter()]
         [switch]
         $ClobberVHDx,
+
+        [parameter()]
+        [string]
+        $UnattendFilePath,
 
         [parameter()]
         [switch]
@@ -341,33 +345,49 @@ function New-VhdxFromWim
     #Mount the new VHDx, get the mounted disk number, and initialize as GPT
     Mount-DiskImage -ImagePath $LocalVhdPath
     $mountedDisk = Get-DiskImage -ImagePath $LocalVhdPath
-    Initialize-Disk -Number $mountedDisk.Number -PartitionStyle GPT
+    $mountedDiskNumber = $mountedDisk.Number
+    $null = Initialize-Disk -Number $mountedDisk.Number -PartitionStyle GPT
 
     #region Partition the new VHDx
     Write-Verbose "Partitioning the VHDx"
-    #System partition
-    $systemPartitionParams = @{
-        DiskNumber  = $mountedDisk.Number
-        Size        = 100MB
-        GptType     = "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}"
-        DriveLetter = $BootDriveLetter
-    }
-    $null = New-Partition @systemPartitionParams -ErrorAction Stop
-    $null = Format-Volume -DriveLetter $BootDriveLetter -FileSystem FAT32 -NewFileSystemLabel "System" -confirm:$false -ErrorAction Stop
-    
-    #MSR partition
-    $null = New-Partition -DiskNumber $mountedDisk.Number -Size 128MB -GptType "{e3c9e316-0b5c-4db8-817d-f92df00215ae}" -ErrorAction Stop
+    try
+        {
+        #System partition
+        $systemPartition = New-Partition -DiskNumber $mountedDiskNumber -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -Size 499MB -Verbose 
+        $null = $systemPartition | Format-Volume -FileSystem FAT32 -Confirm:$false -Verbose
+        $systemPartition | Set-Partition -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 
-    #Windows partition
-    $null = New-Partition -DiskNumber $mountedDisk.Number -UseMaximumSize -DriveLetter $OSDriveLetter -ErrorAction Stop
-    $null = Format-Volume -DriveLetter $OSDriveLetter -FileSystem NTFS -NewFileSystemLabel $WindowsVolumeLabel -confirm:$false -ErrorAction Stop
+        #MSR Partition
+        $null = New-Partition -DiskNumber $mountedDiskNumber -GptType '{e3c9e316-0b5c-4db8-817d-f92df00215ae}' -Size 128MB
+
+        #OS Partition
+        $osPartition = New-Partition -DiskNumber $mountedDiskNumber -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -UseMaximumSize -Verbose
+        $null = $osPartition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $WindowsVolumeLabel -Confirm:$false -Verbose
+
+        Add-PartitionAccessPath -DiskNumber $mountedDiskNumber -PartitionNumber $systemPartition.PartitionNumber -AssignDriveLetter
+        $systemDrive = Get-Partition -DiskNumber $mountedDiskNumber -PartitionNumber $systemPartition.PartitionNumber
+        Add-PartitionAccessPath -DiskNumber $mountedDiskNumber -PartitionNumber $osPartition.PartitionNumber -AssignDriveLetter
+        $osDrive = Get-Partition -DiskNumber $mountedDiskNumber -PartitionNumber $osPartition.PartitionNumber
+    }
+    catch
+    {
+        Dismount-DiskImage -ImagePath $LocalVhdPath
+        break
+    }
     #endregion Partition the new VHDx
 
     Write-Verbose "Applying Wim to VHDD"
-    Expand-WindowsImage -ImagePath $WimPath -ApplyPath "${OSDriveLetter}:\" -Index $ImageIndex -ErrorAction Stop
+    $osDriveRootPath = "$($osDrive.DriveLetter):"
+    $null = Expand-WindowsImage -ImagePath $WimPath -ApplyPath $osDriveRootPath -Index $ImageIndex -ErrorAction Stop
 
     #Copy boot files from the now applied image in the Windows partition to the System partition using bcdboot
-    & "$("${OSDriveLetter}:\Windows\System32\bcdboot.exe")" $("${OSDriveLetter}:\Windows") /s ${BootDriveLetter}: /F UEFI
+    $null = & "$("$($osDrive.DriveLetter):\Windows\System32\bcdboot.exe")" $("$osDriveRootPath\Windows") /s "$($systemDrive.DriveLetter):" /F UEFI
+
+    #Copy unattend file to mounted image
+    if ($UnattendFilePath)
+    {
+        $null = & xcopy.exe $UnattendFilePath "$osDriveRootPath\Windows\System32\Sysprep" /R /Y /J
+    }
 
     if ($DismountVHDx)
     {
@@ -398,7 +418,7 @@ function Install-WSUS
 {
     param(
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
+        [ValidateNotNullOrEmpty()]
         [string]
         $WsusRepoDirectory,
 
@@ -408,9 +428,13 @@ function Install-WSUS
         $UpdateLanguageCode
     )
 
+    if (! (Test-Path $WsusRepoDirectory))
+    {
+        $null = New-Item -Path $WsusRepoDirectory -ItemType Directory -Force -ErrorAction Stop
+    }
+
     #Check for existing installation of WSUS and exit if exists
-    $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530 -ErrorAction SilentlyContinue
-    if ($wsusServer)
+    if ((Get-WindowsFeature -Name "UpdateServices").Installed)
     {
         Write-Warning "WSUS role already installed, exiting."
         break
@@ -418,7 +442,6 @@ function Install-WSUS
 
     Install-WindowsFeature -Name "UpdateServices" -IncludeManagementTools -ErrorAction Stop
 
-    New-Item -Path $WsusRepoDirectory -ItemType "Directory" -Force -ErrorAction Stop
     & 'C:\Program Files\Update Services\Tools\wsusutil.exe' postinstall CONTENT_DIR=$WsusRepoDirectory
 
     Set-WsusServerSynchronization -SyncFromMU
