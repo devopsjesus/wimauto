@@ -36,7 +36,7 @@ function Copy-WimFromISO
 
     if (! (Test-Path $wimParentPath))
     {
-        New-Item -Path $wimParentPath -ItemType Directory -Force -ErrorAction Stop
+        $null = New-Item -Path $wimParentPath -ItemType Directory -Force -ErrorAction Stop
     }
 
     $mountResult = Mount-DiskImage $IsoPath -PassThru -StorageType ISO -ErrorAction Stop | Get-Volume
@@ -49,6 +49,65 @@ function Copy-WimFromISO
     finally
     {
         Dismount-DiskImage -ImagePath $IsoPath
+    }
+}
+
+<#
+    .PARAMETER UpdateFileList
+        Hashtable array of update/packages to install.
+    
+    .EXAMPLE
+        $UpdateFileList = @{
+            ID       = ""
+            FilePath = Join-path -Path $WsusRepoDirectory -ChildPath $($_.FileUri.LocalPath.replace("/Content","/WsusContent"))
+        }
+#>
+function Add-PackageToWim
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $WimPath,
+
+        [parameter(Mandatory)]
+        [ValidatePattern("[1-9]")]
+        [int]
+        $ImageIndex,
+
+        [parameter(Mandatory)]
+        [string]
+        $ImageMountPath,
+
+        [parameter(Mandatory)]
+        [hashtable[]]
+        $UpdateFileList
+    )
+
+    $updateLogPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp\InstalledUpdates-$(Get-Date -Format yyyyMMdd).log"
+
+    foreach ($update in $UpdateFileList)
+    {
+        Write-Verbose "Adding Update $($update.ID) from $($update.FilePath) to image path $ImageMountPath"
+        try
+        {
+            $null = Add-WindowsPackage -PackagePath $update.FilePath -Path $ImageMountPath -WarningAction Ignore
+            "Update $($update.ID) added successfully" | Tee-Object -FilePath $updateLogPath
+        }
+        catch
+        {
+            $packageError = $_
+
+            if ($packageError.Exception.Message.Contains("0x800f081e"))
+            {
+                "Update $($update.ID) not applicable" | Tee-Object -FilePath $updateLogPath
+            }
+            else
+            {
+                "Update $($update.ID) not added. Error: $packageError" | Tee-Object -FilePath $updateLogPath
+            }
+        }
     }
 }
 
@@ -109,50 +168,22 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2016","Windows Server 2012")]
+        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
-
     #requires -Module Dism
 
-    $logPath = Join-Path -Path $ImageMountPath -ChildPath "InstalledUpdates-$(Get-Date -Format yyyyMMdd).log"
-
-    if (! (Test-Path $ImageMountPath))
-    {
-        $null = New-Item -Path $ImageMountPath -ItemType "Directory" -ErrorAction Stop
-    }
-
-    $null = Mount-WindowsImage -ImagePath $WimPath -Index $ImageIndex -Path $ImageMountPath -ErrorAction Stop
+    $updateFileList = Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory $WsusRepoDirectory -ServerVersion $ServerVersion -ErrorAction Stop
     
-    $updateFileList = Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory $WsusRepoDirectory -ServerVersion $ServerVersion
-
-    foreach ($update in $updateFileList)
-    {
-        Write-Verbose "Adding Update $($update.ID) from $($update.FilePath) to image path $ImageMountPath"
-        try
-        {
-            $null = Add-WindowsPackage -PackagePath $update.FilePath -Path $ImageMountPath -WarningAction Ignore
-            "Update $($update.ID) added successfully" >> $logPath
-        }
-        catch
-        {
-            $packageError = $_
-
-            if ($packageError.Exception.Message.Contains("0x800f081e"))
-            {
-                "Update $($update.ID) not applicable" >> $logPath
-            }
-            else
-            {
-                "Update $($update.ID) not added. Error: $packageError" >> $logPath
-            }
-        }
+    Write-Verbose "Adding packages to Wim"
+    $packageToWimParams = @{
+        WimPath        = $WimPath
+        ImageIndex     = 1
+        ImageMountPath = $ImageMountPath
+        UpdateFileList = $updateFileList
     }
-
-    $wimLogPath = Join-Path -Path (Split-Path -Path $WimPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
-
-    $null = Dismount-WindowsImage -Path $ImageMountPath -Save -LogPath $wimLogPath -Append -LogLevel Errors
+    Add-PackageToWim @packageToWimParams
 }
 
 <#
@@ -181,27 +212,28 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2016","Windows Server 2012")]
+        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530 -ErrorAction Stop
-    $approvedUpdates = Get-WsusUpdate -UpdateServer $wsusServer -Approval Approved
+    $approvedUpdates = Get-WsusUpdate -UpdateServer $wsusServer -Approval Approved -Verbose:$false
 
     $approvedServerVersionUpdates = $approvedUpdates.Where({$_.Products -eq $ServerVersion})
-    
-    $approvedUpdateList = $approvedServerVersionUpdates.Update.foreach({
-        @{
-            ID    = $_.Id.UpdateId
-            FilePath=$_.GetInstallableItems().Files.Where({$_.Type -eq "SelfContained"})
-        }
-    })
 
-    $approvedUpdateList.ForEach({
+    if ("NotReady" -in $approvedServerVersionUpdates.Update.State)
+    {
+        throw "Not all updates are finished downloading. Please try again later :)"
+    }
+
+    $supportedUpdates = $approvedServerVersionUpdates.Update.GetInstallableItems().Files.Where({$_.Type -eq "SelfContained" -or $_.Type -eq "None"})
     
-        $updateFSPath = $_.FilePath.FileUri.LocalPath.replace("/Content","/WsusContent")
-        $_.FilePath = Join-path -Path $WsusRepoDirectory -ChildPath $updateFSPath
+    $approvedUpdateList = $supportedUpdates.foreach({
+        @{
+            ID       = $_.Name
+            FilePath = Join-path -Path $WsusRepoDirectory -ChildPath $($_.FileUri.LocalPath.replace("/Content","/WsusContent"))
+        }
     })
 
     $approvedUpdateList.FilePath.ForEach({
@@ -321,7 +353,7 @@ function New-VhdxFromWim
         }
         else
         {
-            Write-Warning "$LocalVhdPath not found, so clobber no happen."
+            Write-Verbose "$LocalVhdPath not found, so clobber no happen."
         }
     }
     
@@ -459,37 +491,73 @@ function Install-WSUS
 
 <#
     .SYNOPSIS
-        Configures WSUS to download only Windows 2016 updates.
+        Configures WSUS to download only Windows 2016 & 2012 R2 updates.
 
     .DESCRIPTION
-        This function will remove all products but Windows 2016 from the WSUS configuration.
+        This function will remove all products but Windows 2016 & 2012 R2 from the WSUS configuration.
         This is a temporary function that will be replaced with something more fully-featured.
 
     .Example
-        Set-WsusConfigurationWin16
+        Set-WsusConfiguration
 #>
-function Set-WsusConfigurationWin16
+function Set-WsusConfiguration
 {
+    param
+    (
+        [Parameter()]
+        [string[]]
+        $ProductIDList = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
+    )
+    
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
     $wsusProductList = Get-WsusProduct -UpdateServer $wsusServer
-    $wsusProductList.ForEach({if ($_.Product.ID -ne "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") { [Microsoft.UpdateServices.Commands.WsusProduct[]]$everythingButWin16 += $_ }})
+    $productsToEnable = $wsusProductList.Where({$_.Product.ID -in $ProductIDList})
+    $wsusProductList.ForEach({if ($_.Product.ID -notin $ProductIDList) { [Microsoft.UpdateServices.Commands.WsusProduct[]]$productsToDisable += $_ }})
 
-    #Disable everything but Windows 2016
-    $everythingButWin16.ForEach({Set-WsusProduct -Product $_ -Disable})
+    #Disable all products not specified
+    $productsToDisable.ForEach({Set-WsusProduct -Product $_ -Disable})
+
+    #Enable products specified
+    $productsToEnable.ForEach({Set-WsusProduct -Product $_})
     
+    $wsusSubscription = $wsusServer.GetSubscription()
+
+    $wsusSubscription.StartSynchronization()
+}
+
+function Set-EnabledProductUpdateApproval
+{
+    param
+    (
+        [Parameter()]
+        [string[]]
+        $ProductIDList = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
+    )
+
+    $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
     Write-Verbose "Gathering updates, this will take some time"
-    $updateList = Get-WsusUpdate -UpdateServer $wsusServer
+    $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
+    $updateList += Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval Declined
 
-    Write-Verbose "Setting non-Windows 2016 Updates to declined"
-    $win16Updates = $updatelist.Where({$_.Products -like "*windows Server 2016*" -and ($_.Update.Title -notlike "*(1709)*" -and $_.Update.Title -notlike "*(1803)*")})
+    $wsusProductList = Get-WsusProduct -UpdateServer $wsusServer
+    $productsToEnable = $wsusProductList.Where({$_.Product.ID -in $ProductIDList})
+    $enabledProductNames = $productsToEnable.Product.Title
+
+    Write-Verbose "Setting Updates for non-specified products to declined"
+    $updatesToApprove = $enabledProductNames.foreach({ $productName = $_ ; $updatelist.Where({$_.Products -like "*$productName*"})})
+
+    <#if ("Windows Server 2016" -in $enabledProductNames)
+    {
+         $updatesToApprove = $updatesToApprove.where({$_.Update.Title -notlike "*(1709)*" -and $_.Update.Title -notlike "*(1803)*"})
+    }#>
+
+    $latestUpdates = $updatesToApprove.where({$_.update.IsSuperseded -eq $false})
+
+    $updatesToDeny = $updatelist.Where({$_ -notin $latestUpdates})
+    $updatesToDeny.ForEach({Deny-WsusUpdate -Update $_})
+
+    $latestUpdates.ForEach({Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers"})
     
-    $nonWin16Updates = $updatelist.Where({$_ -notin $win16Updates})
-    $nonwin16Updates.ForEach({Deny-WsusUpdate -Update $_})
-
-    $latestWin16Updates = $win16Updates.where({$_.update.IsSuperseded -eq $false})
-
-    $latestWin16Updates.ForEach({ Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers" })
-
     $wsusSubscription = $wsusServer.GetSubscription()
 
     $wsusSubscription.StartSynchronization()
