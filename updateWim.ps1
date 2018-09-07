@@ -6,7 +6,7 @@ $imageMountPath    = "$workspacePath\mount"
 $imageIndex        = 1
 $vhdSizeGB         = 21GB
 
-<# Windows 2016 vars 
+# Windows 2016 vars 
 $serverVersion     = "Windows Server 2016"
 $IsoPath           = "C:\Library\ISOs\en_windows_server_2016_updated_feb_2018_x64_dvd_11636692.iso"
 $wimPath           = "$workspacePath\wimrepo\win2016\install.wim"
@@ -14,7 +14,7 @@ $exportedWimPath   = "$workspacePath\wimrepo\win2016\install.optimized.wim"
 $VhdPath           = "C:\VirtualHardDisks\win2016core-$(Get-Date -Format yyyyMMdd).vhdx"
 $vmName            = "win2016updatedimage-$(Get-Date -Format yyyyMMdd)"
 #>
-# Windows 2012 R2 vars
+<# Windows 2012 R2 vars
 $serverVersion     = "Windows Server 2012 R2"
 $IsoPath           = "C:\Library\ISOs\en_windows_server_2012_r2_with_update_x64_dvd_6052708.iso"
 $wimPath           = "$workspacePath\wimrepo\win2012\install.wim"
@@ -54,7 +54,7 @@ while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
 
 Set-EnabledProductUpdateApproval
 #>
-Write-Output "Copying Wim from ISO"
+Write-Output "Copying Wim from ISO: $IsoPath"
 $copyWimParams = @{
     IsoPath            = $IsoPath
     WimDestinationPath = $wimPath
@@ -70,8 +70,8 @@ Write-Output "Mounting image"
 $null = Mount-WindowsImage -ImagePath $wimPath -Index $imageIndex -Path $imageMountPath -ErrorAction Stop
 
 #Dism command used here because there's no parallel PS cmdlet
-Write-Output "Cleaning image and resetting base"
-& Dism.exe /Image:$imageMountPath /Cleanup-Image /StartComponentCleanup /ResetBase
+#Write-Output "Cleaning image and resetting base"
+#& Dism.exe /Image:$imageMountPath /Cleanup-Image /StartComponentCleanup /ResetBase
 #Not sure the below line is necessary here
 #Save-WindowsImage -Path $imageMountPath
 
@@ -98,7 +98,7 @@ $updateWimParams = @{
     WsusRepoDirectory = "$workspacePath\updaterepo"
     ServerVersion     = $serverVersion
 }
-Install-UpdateListToWim @updateWimParams -Verbose
+Install-UpdateListToWim @updateWimParams
 
 Write-Output "Unmounting Image"
 $wimLogPath = Join-Path -Path (Split-Path -Path $wimPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
@@ -108,9 +108,9 @@ $wimLogPath = Join-Path -Path (Split-Path -Path $wimPath -Parent) -ChildPath "Di
 
 #since we typically only deploy the target index ($imageIndex) from the image, export that as the final target wim
 Write-Output "Exporting target index from image"
-Export-WindowsImage -SourceImagePath $wimPath -CheckIntegrity -DestinationImagePath $exportedWimPath -SourceIndex 1
+$null = Export-WindowsImage -SourceImagePath $wimPath -CheckIntegrity -DestinationImagePath $exportedWimPath -SourceIndex 1
 
-Write-Output "Creating VHDx and VM"
+Write-Output "Creating VHDx"
 $newVHDxParams = @{
     LocalVhdPath       = $vhdPath
     VhdSize            = $vhdSizeGB
@@ -122,8 +122,10 @@ $newVHDxParams = @{
     DismountVHDx       = $true
 }
 New-VHDxFromWim @newVHDxParams
-New-VM -Name $vmName -MemoryStartupBytes 1028MB -VHDPath $newVHDxParams.LocalVhdPath -Generation 2 | Start-VM
+#New-VM -Name $vmName -MemoryStartupBytes 1028MB -VHDPath $newVHDxParams.LocalVhdPath -Generation 2 | Start-VM
 
-#Stop-VM -Name $vmName -TurnOff -Force -Confirm:$false
-#Remove-VM -Name $vmName -Force -Confirm:$false
-#Remove-Item -Path $newVHDxParams.LocalVhdPath -Force -Confirm:$false
+<#
+Stop-VM -Name $vmName -TurnOff -Force -Confirm:$false
+Remove-VM -Name $vmName -Force -Confirm:$false
+Remove-Item -Path $newVHDxParams.LocalVhdPath -Force -Confirm:$false
+#>
