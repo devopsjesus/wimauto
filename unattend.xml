@@ -45,5 +45,4 @@
             <UserLocale>en-US</UserLocale>
         </component>
     </settings>
-    <cpi:offlineImage cpi:source="wim://server/library/deploy/updatewim/wimrepo/win2016/install.wim#Windows Server 2016 SERVERSTANDARDCORE" xmlns:cpi="urn:schemas-microsoft-com:cpi" />
 </unattend>
