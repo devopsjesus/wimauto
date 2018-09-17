@@ -72,11 +72,6 @@ function Add-PackageToWim
         $WimPath,
 
         [parameter(Mandatory)]
-        [ValidatePattern("[1-9]")]
-        [int]
-        $ImageIndex,
-
-        [parameter(Mandatory)]
         [string]
         $ImageMountPath,
 
@@ -86,6 +81,7 @@ function Add-PackageToWim
     )
 
     $updateLogPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp\InstalledUpdates-$(Get-Date -Format yyyyMMdd).log"
+    $failedUpdates = @()
 
     foreach ($update in $UpdateFileList)
     {
@@ -106,9 +102,14 @@ function Add-PackageToWim
             else
             {
                 "Update $($update.ID) not added. Error: $packageError" | Tee-Object -FilePath $updateLogPath
+                $failedUpdates = $update
             }
         }
     }
+
+    Copy-Item -Path $updateLogPath -Destination (Split-Path -Path $WimPath -Parent)
+
+    return $failedUpdates
 }
 
 <#
@@ -154,11 +155,6 @@ function Install-UpdateListToWim
         $WimPath,
 
         [parameter(Mandatory)]
-        [ValidatePattern("[1-9]")]
-        [int]
-        $ImageIndex,
-
-        [parameter(Mandatory)]
         [string]
         $ImageMountPath,
 
@@ -179,11 +175,12 @@ function Install-UpdateListToWim
     Write-Verbose "Adding packages to Wim"
     $packageToWimParams = @{
         WimPath        = $WimPath
-        ImageIndex     = 1
         ImageMountPath = $ImageMountPath
         UpdateFileList = $updateFileList
     }
-    Add-PackageToWim @packageToWimParams
+    $failedPackages = Add-PackageToWim @packageToWimParams
+
+    return $failedPackages
 }
 
 <#
@@ -201,7 +198,7 @@ function Install-UpdateListToWim
         Choose either Windows Server 2016 or 2012 as the product version to return updates.
 
     .Example
-        Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updaterepo" -ServerVersion "Windows Server 2016"
+        Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updatewim\updaterepo" -ServerVersion "Windows Server 2012 R2"
 #>
 function Get-SelfContainedApprovedUpdateFileList
 {
@@ -236,14 +233,16 @@ function Get-SelfContainedApprovedUpdateFileList
         }
     })
 
-    $approvedUpdateList.FilePath.ForEach({
+    $injectableUpdateList = $approvedUpdateList.where({$_.FilePath -notlike "*.exe"})
+
+    $injectableUpdateList.FilePath.ForEach({
         if (! (Test-Path $_))
         {
             throw "Update file not found at $_"
         }
     })
 
-    return $approvedUpdateList
+    return $injectableUpdateList
 }
 
 <#
