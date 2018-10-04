@@ -10,6 +10,11 @@ param
     [parameter()]
     [ValidateScript({Test-Path $_})]
     [string]
+    $WorkspacePath     = "C:\Library\deploy\updatewim",
+
+    [parameter()]
+    [ValidateScript({Test-Path $_})]
+    [string]
     $IsoPath           = "C:\Library\ISOs\en_windows_server_2016_updated_feb_2018_x64_dvd_11636692.iso",
 
     [parameter()]
@@ -27,12 +32,7 @@ param
     [parameter()]
     [string]
     $VmName            = "win2016updatedimage-$(Get-Date -Format yyyyMMdd)",
-
-    [parameter()]
-    [ValidateScript({Test-Path $_})]
-    [string]
-    $WorkspacePath     = "C:\Library\deploy\updatewim",
-
+    
     [parameter()]
     [ValidateScript({Test-Path $_})]
     [string]
