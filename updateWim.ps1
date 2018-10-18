@@ -3,7 +3,7 @@
 param
 (
     [parameter()]
-    [ValidateSet("Windows Server 2016","Windows Server 2012")]
+    [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
     [string]
     $ServerVersion     = "Windows Server 2016",
 
