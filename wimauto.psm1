@@ -1,4 +1,333 @@
-﻿<#
+﻿function Invoke-BuildUpdate
+{
+    param
+    (
+        [parameter()]
+        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
+        [string]
+        $ServerVersion,
+
+        [parameter()]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $WorkspacePath,
+
+        [parameter()]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $IsoPath,
+
+        [parameter()]
+        [string]
+        $WimDestinationPath,
+
+        [parameter()]
+        [string]
+        $ExportedWimPath,
+
+        [parameter()]
+        [string]
+        $ImageMountPath,
+
+        [parameter()]
+        [int]
+        $ImageIndex,
+
+        [parameter(
+            #ParameterSetName = "UpdateInjection",
+            Mandatory
+        )]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $UpdateRepoDirectory,
+
+        [parameter(<#ParameterSetName = "UpdateInjection"#>)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Wmf51Path,
+
+        [parameter(<#ParameterSetName = "AnswerFileInjection"#>)]
+        [string]
+        $WindowsProductKey,
+    
+        [parameter(
+            #ParameterSetName = "AnswerFileInjection",
+            Mandatory
+        )]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $UnattendFilePath,
+    
+        [parameter(
+            #ParameterSetName = "AnswerFileInjection",
+            Mandatory
+        )]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $AutounattendFilePath,
+
+        [parameter(
+            #ParameterSetName = "DriverInjection",
+            Mandatory
+        )]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $DriverDirectoryPath,
+
+        [parameter(
+            #ParameterSetName = "IsoGeneration",
+            Mandatory
+        )]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $OscdimgPath,
+
+        [parameter(
+            #ParameterSetName = "IsoGeneration",
+            Mandatory
+        )]
+        [string]
+        $IsoContentsPath,
+
+        [parameter(
+            #ParameterSetName = "IsoGeneration",
+            Mandatory
+        )]
+        [string]
+        $IsoDestinationPath,
+
+        [parameter(
+            #ParameterSetName = "VHDxGeneration",
+            Mandatory
+        )]
+        [string]
+        $VhdPath,
+
+        [parameter(
+            #ParameterSetName = "VHDxGeneration",
+            Mandatory
+        )]
+        [int64]
+        $VhdSizeGB,
+    
+        [parameter()]
+        [switch]
+        $InstallWSUS,
+    
+        [parameter()]
+        [switch]
+        $CopyWimFromIso = $false,
+    
+        [parameter(<#ParameterSetName = "UpdateInjection"#>)]
+        [switch]
+        $InjectUpdates,
+    
+        [parameter(<#ParameterSetName = "DriverInjection"#>)]
+        [switch]
+        $InjectDrivers,
+
+        [parameter(<#ParameterSetName = "AnswerFileInjection"#>)]
+        [switch]
+        $InjectAnswerFiles,
+    
+        [parameter(<#ParameterSetName = "VHDxGeneration"#>)]
+        [switch]
+        $GenerateVHDx,
+    
+        [parameter(<#ParameterSetName = "IsoGeneration"#>)]
+        [switch]
+        $GenerateIso
+    )
+    
+    if ($InstallWSUS)
+    {
+        #The section below will install WSUS - only needs to be run once - I've only tested installing on the deployment host.
+        #The Set-WsusConfiguration command will not run successfully until the initial WSUS Sync is complete (takes a while).
+        Install-WSUS -WsusRepoDirectory "$workspacePath\updaterepo" -UpdateLanguageCode "en"
+
+        $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
+        $wsusSubscription = $wsusServer.GetSubscription()
+        while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+        {
+            Start-Sleep -Seconds 5
+            Write-Output $wsusSubscription.GetSynchronizationProgress()
+        }
+
+        Set-WsusConfiguration
+
+        $wsusSubscription = $wsusServer.GetSubscription()
+        while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+        {
+            Start-Sleep -Seconds 5
+            Write-Output $wsusSubscription.GetSynchronizationProgress()
+        }
+
+        Set-EnabledProductUpdateApproval
+
+        <#to enable reporting in WSUS:
+        Invoke-WebRequest -Uri 'https://download.microsoft.com/download/F/B/7/FB728406-A1EE-4AB5-9C56-74EB8BDDF2FF/ReportViewer.msi' -OutFile "$workspacePath\ReportViewer.msi"
+        go to "https://www.microsoft.com/en-us/download/confirmation.aspx?id=49999&6B49FDFB-8E5B-4B07-BC31-15695C5A2143=1" and download "SQLSysClrTypes.msi"
+        then run the two MSI files - SQL CLR types first
+        #>
+    }
+
+    if ($CopyWimFromIso)
+    {
+        Write-Output "Copying Wim from ISO: $IsoPath"
+        $copyWimParams = @{
+            IsoPath            = $IsoPath
+            WimDestinationPath = $WimDestinationPath
+        }
+        Copy-WimFromISO @copyWimParams
+    }
+
+    Write-Output "Mounting image at $ImageMountPath"
+    $logPath = Join-Path -Path (Split-Path -Path $WimDestinationPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
+    $params = @{
+        ImagePath = $WimDestinationPath
+        ImageMountPath = $ImageMountPath
+        Index = $ImageIndex
+        LogPath = $logPath
+        Mount = $true
+    }
+    $imageInfo = Assert-WindowsImageMounted @params
+
+    if ($serverVersion -eq "Windows Server 2012 R2")
+    {
+        Write-Output "  Adding WMF5.1 to image"
+        $updateWimParams = @{
+            WimPath        = $WimDestinationPath
+            ImageMountPath = $ImageMountPath
+            UpdateFileList = @{
+                ID       = "Win8.1AndW2K12R2-KB3191564-x64"
+                FilePath = $wmf51Path
+            }
+        }
+        Add-PackageToWim @updateWimParams
+
+        #Write-Output "Adding updates from Win12 updates path to image"
+        #$win12Updates = Get-ChildItem $win12UpdatesPath
+        #$win12UpdatesDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp"
+        #foreach ($update in $win12Updates)
+        #{
+        #    Copy-Item -Path $win12UpdatesPath -Destination $win12UpdatesDestinationPath -Force -Recurse -ErrorAction Stop
+        #}
+    }
+
+    if ($InjectUpdates)
+    {
+        Write-Output "  Adding Updates to image"
+        $updateWimParams = @{
+            WimPath           = $WimDestinationPath
+            ImageMountPath    = $ImageMountPath
+            WsusRepoDirectory = $UpdateRepoDirectory
+            ServerVersion     = $serverVersion
+        }
+        Install-UpdateListToWim @updateWimParams
+    }
+
+    if ($InjectDrivers)
+    {
+        $injectDriverParams = @{
+            ImageMountPath      = $ImageMountPath
+            DriverDirectoryPath = $DriverDirectoryPath
+        }
+        Add-DriverToWim @injectDriverParams
+    }
+
+    if (! $WindowsProductKey)
+    {
+        $unattendDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\System32\Sysprep\unattend.xml"
+        Write-Output "  Injecting $UnattendFilePath to $unattendDestinationPath"
+        $kmsActivationKeys = @(
+            @{
+                Name = "Windows Server 2019 SERVERDATACENTER"
+                Key  = "WMDGN-G9PQG-XVVXX-R3X43-63DFG"
+            }
+            @{
+                Name = "Windows Server 2019 SERVERSTANDARD"
+                Key  = "N69G4-B89J2-4G8F4-WWYCC-J464C"
+            }
+            @{    
+                Name = "Windows Server 2016 SERVERDATACENTER"
+                Key  = "CB7KF-BWN84-R7R2Y-793K2-8XDDG"
+            }
+            @{    
+                Name = "Windows Server 2016 SERVERSTANDARD"
+                Key  = "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"
+            }
+            @{    
+                Name = "Windows Server 2012 R2 SERVERSTANDARD"
+                Key  = "D2N9P-3P6X9-2R39C-7RTCD-MDVJX"
+            }
+            @{    
+                Name = "Windows Server 2012 R2 SERVERDATACENTER"
+                Key  = "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9"
+            }
+        )
+
+        $WindowsProductKey = $kmsActivationKeys.Where({$imageInfo.ImageName -like "$($_.Name)*"}).Key
+        if ($WindowsProductKey.Count -ne 1)
+        {
+            throw "Could not assume product key from image name: $($imageInfo.ImageName)."
+        }
+    }
+
+    [xml]$unattendContents = Get-Content -Path $UnattendFilePath
+    $unattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.InnerText = $WindowsProductKey })
+
+    Write-Verbose "Saving $UnattendFilePath with Product key ($WindowsProductKey) injected."
+    $unattendContents.Save($unattendDestinationPath)
+
+    Write-Output "Dismounting image at $ImageMountPath"
+    $params = @{
+        ImagePath      = $WimDestinationPath
+        ImageMountPath = $ImageMountPath
+        Index          = $ImageIndex
+        LogPath        = $logPath
+        Dismount       = $true
+    }
+    Assert-WindowsImageMounted @params
+
+    #since we typically only deploy the target index ($ImageIndex) from the image, export that as the final target wim
+    Write-Output "Exporting target index $ImageIndex from image $WimDestinationPath"
+    #Removing item below so as not to introduce multiple images into the WIM
+    $null = Remove-Item -Path $exportedWimPath -Force -Confirm:$false
+    $null = Export-WindowsImage -SourceImagePath $WimDestinationPath -CheckIntegrity -DestinationImagePath $exportedWimPath -SourceIndex $ImageIndex -ErrorAction Stop
+
+    if ($GenerateVHDx)
+    {
+        Write-Output "Creating VHDx at $VhdPath"
+        $newVHDxParams = @{
+            VhdPath      = $VhdPath
+            VhdSize      = $vhdSizeGB
+            VHDDType     = "Dynamic"
+            WimPath      = $exportedWimPath
+            ImageIndex   = 1 #only a single image after export
+            ClobberVHDx  = $true
+            DismountVHDx = $true
+        }
+        New-VHDxFromWim @newVHDxParams
+    }
+
+    if ($GenerateIso)
+    {
+        Write-Output "Creating ISO at $IsoDestinationPath"
+        $newIsoParams = @{
+            OscdimgPath          = $OscdimgPath
+            IsoPath              = $IsoPath
+            IsoContentsPath      = $IsoContentsPath
+            IsoLabel             = $ServerVersion.Replace(" ","")
+            WimPath              = $exportedWimPath
+            IsoDestinationPath   = $IsoDestinationPath
+            AutounattendFilePath = $AutounattendFilePath
+            WindowsProductKey    = $WindowsProductKey
+        }
+        New-IsoFromWim @newIsoParams
+    }
+}
+
+<#
     .SYNOPSIS
         Copies the Windows image (install.wim) from a Windows Server ISO.
 
@@ -53,14 +382,33 @@ function Copy-WimFromISO
 }
 
 <#
+    .SYNOPSIS
+        Attempts to add a Windows package to a Windows image.
+
+    .DESCRIPTION
+        Receives a list of updates and file paths, and attempts to add them to a mounted Windows Image. Updates are logged as
+        either success, unnecessary, or failed depending on the results of the Add-WindowsPackage cmdlet.
+
+    .PARAMETER WimPath
+        Path to set as the desired WSUS Update repository.
+
+    .PARAMETER ImageMountPath
+        Directory to which the image will be mounted.
+        
     .PARAMETER UpdateFileList
-        Hashtable array of update/packages to install.
+        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging, 
+        FilePath points to the package file.
     
     .EXAMPLE
-        $UpdateFileList = @{
-            ID       = ""
-            FilePath = Join-path -Path $WsusRepoDirectory -ChildPath $($_.FileUri.LocalPath.replace("/Content","/WsusContent"))
+        $packageToWimParams = @{
+            WimPath        = $WimPath
+            ImageMountPath = $ImageMountPath
+            UpdateFileList = @{
+                ID       = "KB300XXXX"
+                FilePath = "C:\Library\deploy\updatewim\updaterepo\WsusContent\0C\D28266C0C18747BB4A6CE1380C40A2A573A4AB0C.cab"
+            }
         }
+        Add-PackageToWim @packageToWimParams
 #>
 function Add-PackageToWim
 {
@@ -110,6 +458,45 @@ function Add-PackageToWim
     Copy-Item -Path $updateLogPath -Destination (Split-Path -Path $WimPath -Parent)
 
     return $failedUpdates
+}
+
+<#
+    .SYNOPSIS
+        Attempts to add drivers from a specified directory to a Windows image.
+
+    .DESCRIPTION
+        This function will attempt to recurse through a specified directory to add any drivers found to the specified image mount path.
+
+    .PARAMETER ImageMountPath
+        Directory the image is mounted.
+        
+    .PARAMETER DriverDirectoryPath
+        Path to the folder with the drivers to inject into the wim
+    
+    .EXAMPLE
+        $packageToWimParams = @{
+            ImageMountPath = $ImageMountPath
+            DriverDirectoryPath = $DriverDirectoryPath
+        }
+        Add-DriverToWim @packageToWimParams
+#>
+function Add-DriverToWim
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [string]
+        $ImageMountPath,
+
+        [parameter(Mandatory)]
+        [string]
+        $DriverDirectoryPath
+    )
+
+    $logPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp\InstalledDrivers-$(Get-Date -Format yyyyMMdd).log"
+    
+    Write-Verbose "Adding Drivers from $DriverDirectoryPath to image path $ImageMountPath"
+    $null = Add-WindowsDriver -Path $ImageMountPath -Driver $DriverDirectoryPath -Recurse -ErrorAction Stop -LogPath $logPath -LogLevel Errors
 }
 
 <#
@@ -178,9 +565,9 @@ function Install-UpdateListToWim
         ImageMountPath = $ImageMountPath
         UpdateFileList = $updateFileList
     }
-    $failedPackages = Add-PackageToWim @packageToWimParams
+    Add-PackageToWim @packageToWimParams
 
-    return $failedPackages
+    #return $failedPackages
 }
 
 <#
@@ -303,7 +690,7 @@ function New-VhdxFromWim
     param(
         [parameter(Mandatory)]
         [string]
-        $LocalVhdPath,
+        $VhdPath,
     
         [parameter(Mandatory)]
         [double]
@@ -333,51 +720,37 @@ function New-VhdxFromWim
         $ClobberVHDx,
 
         [parameter()]
-        [string]
-        $UnattendFilePath,
-
-        [parameter()]
         [switch]
         $DismountVHDx
     )
 
-    #requires -Module Hyper-V, Dism -RunAsAdministrator
-
-    if ($ClobberVHDx)
+    #Don't use the requires statement, because this is the only function that requires the following modules
+    if (! (Get-Module -Name Hyper-V,Dism))
     {
-        if (Test-Path -Path $LocalVhdPath)
-        {
-            Write-Verbose "Clobbering existing VHD"
-            Remove-Item $LocalVhdPath -Force
-        }
-        else
-        {
-            Write-Verbose "$LocalVhdPath not found, so clobber no happen."
-        }
+        throw "This function requires the Hyper-V and DISM modules."
+    }
+
+    if ($ClobberVHDx -and (Test-Path -Path $VhdPath))
+    {
+        Write-Verbose "Clobbering existing VHD"
+        Remove-Item $VhdPath -Force -ErrorAction Stop
     }
     
-    Write-Verbose "Creating VHDx"
-    try
+    Write-Verbose "Creating VHD at $VhdPath"
+    if ($VHDDType -eq "Dynamic")
     {
-        if ($VHDDType -eq "Dynamic")
-        {
-            $null = New-VHD -Path $LocalVhdPath -SizeBytes $VhdSize -Dynamic -ErrorAction Stop
-        }
-        else
-        {
-            $null = New-VHD -Path $LocalVhdPath -SizeBytes $VhdSize -Fixed -ErrorAction Stop
-        }
+        $null = New-VHD -Path $VhdPath -SizeBytes $VhdSize -Dynamic -ErrorAction Stop
     }
-    catch
+    else
     {
-        throw "Could not create Virtual disk."
+        $null = New-VHD -Path $VhdPath -SizeBytes $VhdSize -Fixed -ErrorAction Stop
     }
 
     #Mount the new VHDx, get the mounted disk number, and initialize as GPT
-    Mount-DiskImage -ImagePath $LocalVhdPath
-    $mountedDisk = Get-DiskImage -ImagePath $LocalVhdPath
+    Mount-DiskImage -ImagePath $VhdPath -ErrorAction Stop
+    $mountedDisk = Get-DiskImage -ImagePath $VhdPath
     $mountedDiskNumber = $mountedDisk.Number
-    $null = Initialize-Disk -Number $mountedDisk.Number -PartitionStyle GPT
+    $null = Initialize-Disk -Number $mountedDisk.Number -PartitionStyle GPT -ErrorAction Stop
 
     #region Partition the new VHDx
     Write-Verbose "Partitioning the VHDx"
@@ -402,7 +775,7 @@ function New-VhdxFromWim
     }
     catch
     {
-        Dismount-DiskImage -ImagePath $LocalVhdPath
+        Dismount-DiskImage -ImagePath $VhdPath
         break
     }
     #endregion Partition the new VHDx
@@ -414,17 +787,245 @@ function New-VhdxFromWim
     #Copy boot files from the now applied image in the Windows partition to the System partition using bcdboot
     $null = & "$("$($osDrive.DriveLetter):\Windows\System32\bcdboot.exe")" $("$osDriveRootPath\Windows") /s "$($systemDrive.DriveLetter):" /F UEFI
 
-    #Copy unattend file to mounted image
-    if ($UnattendFilePath)
-    {
-        $null = & xcopy.exe $UnattendFilePath "$osDriveRootPath\Windows\System32\Sysprep" /R /Y /J
-    }
-
     if ($DismountVHDx)
     {
         Write-Verbose "Dismounting VHDD"
-        Dismount-DiskImage -ImagePath $LocalVhdPath
+        Dismount-DiskImage -ImagePath $VhdPath
     }
+}
+
+<#
+    .SYNOPSIS
+        Creates an ISO from the contents of an existing ISO and a specified Wim.
+
+    .DESCRIPTION
+        Copies the contents of a specified 
+
+    .PARAMETER OscdimgPath
+        Path to the WADK utility osdcimg.exe, which can be installed via the WADK.
+
+    .PARAMETER IsoPath
+        Path to the ISO from which to copy bootable ISO media contents.
+
+    .PARAMETER IsoContentsPath
+        Path to the directory that will contain the contents of the ISO with the updated WIM.
+
+    .PARAMETER IsoDestinationPath
+        Path to export the resulting ISO.
+
+    .PARAMETER IsoLabel
+        The label to attach to the resulting ISO image.
+
+    .PARAMETER WimPath
+        Path to the WIM to be applied.
+        
+    .EXAMPLE
+        $newIsoParams = @{
+            OscdimgPath          = "$WorkspacePath\Oscdimg\oscdimg.exe"
+            IsoPath              = "C:\Library\ISOs\en_windows_server_2016_updated_feb_2018_x64_dvd_11636692.iso"
+            IsoContentsPath      = "$WorkspacePath\ISOContents"
+            IsoLabel             = "Win2K16DC"
+            WimPath              = "$workspacePath\wimrepo\win2016\install.optimized.wim"
+            IsoDestinationPath   = "$WorkspacePath\Win2K16DC-$(Get-Date -Format yyyyMMdd).iso"
+        }
+        New-IsoFromWim @newIsoParams
+#>
+function New-IsoFromWim
+{
+    param
+    (
+        [parameter()]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $OscdimgPath,
+
+        [parameter()]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $IsoPath,
+
+        [parameter()]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $IsoContentsPath,
+
+        [parameter()]
+        [string]
+        $IsoDestinationPath,
+
+        [parameter()]
+        [string]
+        $IsoLabel,
+
+        [parameter(Mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $WimPath,
+
+        [parameter(Mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $AutounattendFilePath,
+        
+        [parameter(Mandatory)]
+        [string]
+        $WindowsProductKey
+    )
+
+    $iso = Get-DiskImage -ImagePath $IsoPath -StorageType ISO
+    if (! ($iso.Attached))
+    {
+        $driveLetter = (Mount-DiskImage $IsoPath -PassThru -StorageType ISO -ErrorAction Stop | Get-Volume).DriveLetter
+    }
+    else
+    {
+        $driveLetter = (Get-Volume -DiskImage $iso -ErrorAction Stop).DriveLetter
+    }
+
+    #Copy-Item -Path "$($driveLetter):\*" -Destination $IsoContentsPath -Exclude "install.wim" -Recurse -Force
+    "${driveLetter}:\Sources\install.wim" > "$Env:TEMP\xcopyexclude.txt"
+    $null = & xcopy.exe "${driveLetter}:\" "$IsoContentsPath\*" /R /Y /E /EXCLUDE:"$Env:TEMP\xcopyexclude.txt"
+    Remove-Item -Path "$Env:TEMP\xcopyexclude.txt" -Force -ErrorAction Stop
+    
+    $null = Dismount-DiskImage -ImagePath $IsoPath -ErrorAction Stop
+
+    $autounattendDestinationPath = Join-Path -Path $IsoContentsPath -ChildPath "Autounattend.xml"
+    Write-Verbose "Injecting $AutounattendFilePath to $autounattendDestinationPath"
+    [xml]$autounattendContents = Get-Content -Path $AutounattendFilePath
+    $autounattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.Key = $WindowsProductKey })
+
+    Write-Verbose "Saving $AutounattendFilePath with $WindowsProductKey injected."
+    $autounattendContents.Save($autounattendDestinationPath)
+
+    #Copy-Item -Path $WimPath -Destination (Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim") -Force
+    Write-Output "  Copying $WimPath to ISO Contents folder $(Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim")"
+    $null = & xcopy.exe $WimPath "$(Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim")*" /R /Y /E
+    
+    $bootFilePath = Join-Path -Path $IsoContentsPath -ChildPath "efi\microsoft\boot\efisys.bin"
+    if (! (Test-Path $bootFilePath))
+    {
+        throw "Boot file (efisys.bin) not found in ISO contents - CD cannot be made bootable."
+    }
+    try
+    {
+        Write-Output "  Running $OscdimgPath to generate ISO at $IsoDestinationPath"
+        $sb = [scriptblock]::Create(". $OscdimgPath -u2 -l$IsoLabel -b$bootFilePath $IsoContentsPath $IsoDestinationPath")
+        $null = $sb.Invoke()
+    }
+    catch
+    {
+        throw "Could not create ISO"
+    }
+}
+
+<#
+    .SYNOPSIS
+        Attempts to add a Windows package to a Windows image.
+
+    .DESCRIPTION
+        Receives a list of updates and file paths, and attempts to add them to a mounted Windows Image. Updates are logged as
+        either success, unnecessary, or failed depending on the results of the Add-WindowsPackage cmdlet.
+
+    .PARAMETER ImagePath
+        Path to the Windows Image.
+
+    .PARAMETER ImageMountPath
+        Directory to which the image will be mounted.
+        
+    .PARAMETER UpdateFileList
+        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging, 
+        FilePath points to the package file.
+    
+    .EXAMPLE
+        $wimParams = @{
+            WimPath        = $WimPath
+            ImageMountPath = $ImageMountPath
+            UpdateFileList = @{
+                ID       = "KB300XXXX"
+                FilePath = "C:\Library\deploy\updatewim\updaterepo\WsusContent\0C\D28266C0C18747BB4A6CE1380C40A2A573A4AB0C.cab"
+            }
+        }
+        Assert-WindowsImageMounted @wimParams
+#>
+function Assert-WindowsImageMounted
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $ImagePath,
+
+        [parameter(Mandatory)]
+        [int]
+        $Index,
+        
+        [parameter(Mandatory)]
+        [string]
+        $ImageMountPath,
+
+        [parameter(ParameterSetName='Mount')]
+        [parameter(ParameterSetName='Dismount')]
+        $LogPath,
+
+        [parameter(ParameterSetName='Mount')]
+        [switch]
+        $Mount = $true,
+        
+        [parameter(ParameterSetName='Dismount')]
+        [switch]
+        $Dismount,
+        
+        [parameter(ParameterSetName='Dismount')]
+        [switch]
+        $Save = $true
+    )
+
+    if (! (Test-Path $ImageMountPath))
+    {
+        $null = New-Item -Path $ImageMountPath -ItemType "Directory" -ErrorAction Stop
+    }
+
+    $params = @{
+        Path = $ImageMountPath
+        LogPath = $LogPath
+        ErrorAction = "Stop"
+    }
+
+    if ($Dismount)
+    {
+        if ($Save)
+        {
+            $null = & Dism.exe /Unmount-Image /MountDir:$ImageMountPath /Commit /LogLevel:1 /LogPath:$LogPath
+        }
+        else
+        {
+            $null = & Dism.exe /Unmount-Image /MountDir:$ImageMountPath /Discard /LogLevel:1 /LogPath:$LogPath
+            
+        }
+        return
+    }
+
+    $wimInfo = Get-WindowsImage -ImagePath $ImagePath -Index $Index -ErrorAction Stop
+    $mountedWims = Get-WindowsImage -Mounted
+
+    if ($ImagePath -notin $mountedWims.ImagePath)
+    {
+        $params += @{ ImagePath = $ImagePath }
+        $params += @{ Index = $Index }
+        Write-Verbose "Image not mounted"
+        #try
+        #{
+            $null = Mount-WindowsImage @params
+            $wimInfo = Get-WindowsImage -ImagePath $ImagePath -Index $Index -ErrorAction Stop
+        #}
+        #catch
+        #{
+        #    throw "Could not mount Windows image at $ImagePath. Is it in use?"
+        #}
+    }
+
+    return $wimInfo
 }
 
 <#
@@ -524,20 +1125,39 @@ function Set-WsusConfiguration
     $wsusSubscription.StartSynchronization()
 }
 
+<#
+    .SYNOPSIS
+        Enables upates for the specified WSUS product IDs.
+
+    .DESCRIPTION
+        This function will approve all non-superseded (latest) updates for the All Computers group for any 
+        WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be 
+        exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName 
+        and Windows Server 2016 & 2012 R2.
+
+    .Example
+        Set-WsusConfiguration
+#>
 function Set-EnabledProductUpdateApproval
 {
     param
     (
         [Parameter()]
+        [string]
+        $WsusServerName = "localhost",
+
+        [Parameter()]
         [string[]]
-        $ProductIDList = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList  = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
+
     Write-Verbose "Gathering updates, this will take some time"
     $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
     $updateList += Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval Declined
 
+    Write-Verbose "Retrieving list of specified products from IDs"
     $wsusProductList = Get-WsusProduct -UpdateServer $wsusServer
     $productsToEnable = $wsusProductList.Where({$_.Product.ID -in $ProductIDList})
     $enabledProductNames = $productsToEnable.Product.Title
