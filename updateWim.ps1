@@ -1,4 +1,4 @@
-﻿#requires -RunAsAdministrator
+#requires -RunAsAdministrator
 $workspacePath = "C:\Library\deploy\updatewim"
 $ServerVersion = "Windows Server 2012 R2"
 $WimAutoModulePath    = "$workspacePath\wimauto.psd1"
