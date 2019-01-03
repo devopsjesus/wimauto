@@ -68,7 +68,6 @@
 
         [parameter(
             #ParameterSetName = "DriverInjection",
-            Mandatory
         )]
         [ValidateScript({Test-Path $_})]
         [string]
@@ -91,7 +90,6 @@
 
         [parameter(
             #ParameterSetName = "IsoGeneration",
-            Mandatory
         )]
         [string]
         $IsoDestinationPath,
@@ -181,7 +179,7 @@
         Copy-WimFromISO @copyWimParams
     }
 
-    Write-Output "Mounting image at $ImageMountPath"
+    Write-Output "Mounting image ($WimDestinationPath) at $ImageMountPath"
     $logPath = Join-Path -Path (Split-Path -Path $WimDestinationPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
     $params = @{
         ImagePath = $WimDestinationPath
@@ -457,7 +455,7 @@ function Add-PackageToWim
 
     Copy-Item -Path $updateLogPath -Destination (Split-Path -Path $WimPath -Parent)
 
-    return $failedUpdates
+    #return $failedUpdates
 }
 
 <#
@@ -1136,7 +1134,7 @@ function Set-WsusConfiguration
         and Windows Server 2016 & 2012 R2.
 
     .Example
-        Set-WsusConfiguration
+        Set-EnabledProductUpdateApproval
 #>
 function Set-EnabledProductUpdateApproval
 {
@@ -1165,17 +1163,17 @@ function Set-EnabledProductUpdateApproval
     Write-Verbose "Setting Updates for non-specified products to declined"
     $updatesToApprove = $enabledProductNames.foreach({ $productName = $_ ; $updatelist.Where({$_.Products -like "*$productName*"})})
 
-    <#if ("Windows Server 2016" -in $enabledProductNames)
+    if ("Windows Server 2016" -in $enabledProductNames)
     {
          $updatesToApprove = $updatesToApprove.where({$_.Update.Title -notlike "*(1709)*" -and $_.Update.Title -notlike "*(1803)*"})
-    }#>
+    }
 
     $latestUpdates = $updatesToApprove.where({$_.update.IsSuperseded -eq $false})
 
     $updatesToDeny = $updatelist.Where({$_ -notin $latestUpdates})
-    $updatesToDeny.ForEach({Deny-WsusUpdate -Update $_})
+    $updatesToDeny.ForEach({ Deny-WsusUpdate -Update $_ })
 
-    $latestUpdates.ForEach({Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers"})
+    $latestUpdates.ForEach({ Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers" })
     
     $wsusSubscription = $wsusServer.GetSubscription()
 
