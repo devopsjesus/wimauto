@@ -1,4 +1,4 @@
-name: Modules CD
+name: WimAuto CD
 
 on:
   push:
@@ -14,5 +14,5 @@ jobs:
       - name: Upload Modules as Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: wimauto-module
-          path: wimauto/
+          name: wimauto-modules
+          path: modules/
