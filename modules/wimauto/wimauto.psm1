@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
+        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion,
 
@@ -33,10 +33,7 @@
         [int]
         $ImageIndex,
 
-        [parameter(
-            #ParameterSetName = "UpdateInjection",
-            Mandatory
-        )]
+        [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $UpdateRepoDirectory,
@@ -50,61 +47,39 @@
         [string]
         $WindowsProductKey,
     
-        [parameter(
-            #ParameterSetName = "AnswerFileInjection",
-            Mandatory
-        )]
+        [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $UnattendFilePath,
     
-        [parameter(
-            #ParameterSetName = "AnswerFileInjection",
-            Mandatory
-        )]
+        [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $AutounattendFilePath,
 
-        [parameter(
-            #ParameterSetName = "DriverInjection",
-        )]
+        [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $DriverDirectoryPath,
 
-        [parameter(
-            #ParameterSetName = "IsoGeneration",
-            Mandatory
-        )]
+        [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $OscdimgPath,
 
-        [parameter(
-            #ParameterSetName = "IsoGeneration",
-            Mandatory
-        )]
+        [parameter()]
         [string]
         $IsoContentsPath,
 
-        [parameter(
-            #ParameterSetName = "IsoGeneration",
-        )]
+        [parameter()]
         [string]
         $IsoDestinationPath,
 
-        [parameter(
-            #ParameterSetName = "VHDxGeneration",
-            Mandatory
-        )]
+        [parameter()]
         [string]
         $VhdPath,
 
-        [parameter(
-            #ParameterSetName = "VHDxGeneration",
-            Mandatory
-        )]
+        [parameter()]
         [int64]
         $VhdSizeGB,
     
