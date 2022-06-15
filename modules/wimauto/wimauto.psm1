@@ -154,37 +154,40 @@
         Copy-WimFromISO @copyWimParams
     }
 
-    Write-Output "Mounting image ($WimDestinationPath) at $ImageMountPath"
-    $logPath = Join-Path -Path (Split-Path -Path $WimDestinationPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
-    $params = @{
-        ImagePath = $WimDestinationPath
-        ImageMountPath = $ImageMountPath
-        Index = $ImageIndex
-        LogPath = $logPath
-        Mount = $true
-    }
-    $imageInfo = Assert-WindowsImageMounted @params
-
-    if ($serverVersion -eq "Windows Server 2012 R2")
+    if ($InjectUpdates -or $injectDrivers -or $InjectAnswerFiles)
     {
-        Write-Output "  Adding WMF5.1 to image"
-        $updateWimParams = @{
-            WimPath        = $WimDestinationPath
+        Write-Output "Mounting image ($WimDestinationPath) at $ImageMountPath"
+        $logPath = Join-Path -Path (Split-Path -Path $WimDestinationPath -Parent) -ChildPath "DismountErrors-$(Get-Date -Format yyyyMMdd).log"
+        $params = @{
+            ImagePath      = $WimDestinationPath
             ImageMountPath = $ImageMountPath
-            UpdateFileList = @{
-                ID       = "Win8.1AndW2K12R2-KB3191564-x64"
-                FilePath = $wmf51Path
-            }
+            Index          = $ImageIndex
+            LogPath        = $logPath
+            Mount          = $true
         }
-        Add-PackageToWim @updateWimParams
+        $imageInfo = Assert-WindowsImageMounted @params
 
-        #Write-Output "Adding updates from Win12 updates path to image"
-        #$win12Updates = Get-ChildItem $win12UpdatesPath
-        #$win12UpdatesDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp"
-        #foreach ($update in $win12Updates)
-        #{
-        #    Copy-Item -Path $win12UpdatesPath -Destination $win12UpdatesDestinationPath -Force -Recurse -ErrorAction Stop
-        #}
+        if ($serverVersion -eq "Windows Server 2012 R2")
+        {
+            Write-Output "  Adding WMF5.1 to image"
+            $updateWimParams = @{
+                WimPath        = $WimDestinationPath
+                ImageMountPath = $ImageMountPath
+                UpdateFileList = @{
+                    ID       = "Win8.1AndW2K12R2-KB3191564-x64"
+                    FilePath = $wmf51Path
+                }
+            }
+            Add-PackageToWim @updateWimParams
+
+            #Write-Output "Adding updates from Win12 updates path to image"
+            #$win12Updates = Get-ChildItem $win12UpdatesPath
+            #$win12UpdatesDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp"
+            #foreach ($update in $win12Updates)
+            #{
+            #    Copy-Item -Path $win12UpdatesPath -Destination $win12UpdatesDestinationPath -Force -Recurse -ErrorAction Stop
+            #}
+        }
     }
 
     if ($InjectUpdates)
@@ -208,49 +211,52 @@
         Add-DriverToWim @injectDriverParams
     }
 
-    if (! $WindowsProductKey)
+    if ($InjectAnswerFiles)
     {
-        $unattendDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\System32\Sysprep\unattend.xml"
-        Write-Output "  Injecting $UnattendFilePath to $unattendDestinationPath"
-        $kmsActivationKeys = @(
-            @{
-                Name = "Windows Server 2019 SERVERDATACENTER"
-                Key  = "WMDGN-G9PQG-XVVXX-R3X43-63DFG"
-            }
-            @{
-                Name = "Windows Server 2019 SERVERSTANDARD"
-                Key  = "N69G4-B89J2-4G8F4-WWYCC-J464C"
-            }
-            @{    
-                Name = "Windows Server 2016 SERVERDATACENTER"
-                Key  = "CB7KF-BWN84-R7R2Y-793K2-8XDDG"
-            }
-            @{    
-                Name = "Windows Server 2016 SERVERSTANDARD"
-                Key  = "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"
-            }
-            @{    
-                Name = "Windows Server 2012 R2 SERVERSTANDARD"
-                Key  = "D2N9P-3P6X9-2R39C-7RTCD-MDVJX"
-            }
-            @{    
-                Name = "Windows Server 2012 R2 SERVERDATACENTER"
-                Key  = "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9"
-            }
-        )
-
-        $WindowsProductKey = $kmsActivationKeys.Where({$imageInfo.ImageName -like "$($_.Name)*"}).Key
-        if ($WindowsProductKey.Count -ne 1)
+        if (! $WindowsProductKey)
         {
-            throw "Could not assume product key from image name: $($imageInfo.ImageName)."
+            $unattendDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\System32\Sysprep\unattend.xml"
+            Write-Output "  Injecting $UnattendFilePath to $unattendDestinationPath"
+            $kmsActivationKeys = @(
+                @{
+                    Name = "Windows Server 2019 Datacenter"
+                    Key  = "WMDGN-G9PQG-XVVXX-R3X43-63DFG"
+                }
+                @{
+                    Name = "Windows Server 2019 Standard"
+                    Key  = "N69G4-B89J2-4G8F4-WWYCC-J464C"
+                }
+                @{
+                    Name = "Windows Server 2016 SERVERDATACENTER"
+                    Key  = "CB7KF-BWN84-R7R2Y-793K2-8XDDG"
+                }
+                @{
+                    Name = "Windows Server 2016 SERVERSTANDARD"
+                    Key  = "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"
+                }
+                @{
+                    Name = "Windows Server 2012 R2 SERVERSTANDARD"
+                    Key  = "D2N9P-3P6X9-2R39C-7RTCD-MDVJX"
+                }
+                @{
+                    Name = "Windows Server 2012 R2 SERVERDATACENTER"
+                    Key  = "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9"
+                }
+            )
+
+            $WindowsProductKey = $kmsActivationKeys.Where({$imageInfo.ImageName -like "$($_.Name)*"}).Key
+            if ([string]::IsNullOrEmpty($WindowsProductKey) -or $WindowsProductKey.Count -ne 1)
+            {
+                throw "Could not assume product key from image name: $($imageInfo.ImageName)."
+            }
         }
+
+        [xml]$unattendContents = Get-Content -Path $UnattendFilePath
+        $unattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.InnerText = $WindowsProductKey })
+
+        Write-Verbose "Saving $UnattendFilePath with Product key ($WindowsProductKey) injected."
+        $unattendContents.Save($unattendDestinationPath)
     }
-
-    [xml]$unattendContents = Get-Content -Path $UnattendFilePath
-    $unattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.InnerText = $WindowsProductKey })
-
-    Write-Verbose "Saving $UnattendFilePath with Product key ($WindowsProductKey) injected."
-    $unattendContents.Save($unattendDestinationPath)
 
     Write-Output "Dismounting image at $ImageMountPath"
     $params = @{
@@ -410,7 +416,7 @@ function Add-PackageToWim
         try
         {
             $null = Add-WindowsPackage -PackagePath $update.FilePath -Path $ImageMountPath -WarningAction Ignore
-            "Update $($update.ID) added successfully" | Tee-Object -FilePath $updateLogPath
+            "Update $($update.ID) added successfully" | Tee-Object -FilePath $updateLogPath -Append
         }
         catch
         {
@@ -418,11 +424,11 @@ function Add-PackageToWim
 
             if ($packageError.Exception.Message.Contains("0x800f081e"))
             {
-                "Update $($update.ID) not applicable" | Tee-Object -FilePath $updateLogPath
+                "Update $($update.ID) not applicable" | Tee-Object -FilePath $updateLogPath -Append
             }
             else
             {
-                "Update $($update.ID) not added. Error: $packageError" | Tee-Object -FilePath $updateLogPath
+                "Update $($update.ID) not added. Error: $packageError" | Tee-Object -FilePath $updateLogPath -Append
                 $failedUpdates = $update
             }
         }
@@ -494,7 +500,7 @@ function Add-DriverToWim
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2019, 2016 or 2012 as the product version to return updates.
 
     .Example
         $updateWimParams = @{
@@ -524,7 +530,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
+        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -549,13 +555,13 @@ function Install-UpdateListToWim
 
     .DESCRIPTION
         Returns an array of hashtables containing the ID and filepath of all approved, self-contained
-        updates for Windows Server 2016 or 2012.
+        updates for Windows Server 2019, 2016 or 2012.
 
     .PARAMETER WsusRepoDirectory
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2019, 2016 or 2012 as the product version to return updates.
 
     .Example
         Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updatewim\updaterepo" -ServerVersion "Windows Server 2012 R2"
@@ -569,7 +575,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2016","Windows Server 2012 R2")]
+        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -818,7 +824,7 @@ function New-IsoFromWim
         $IsoPath,
 
         [parameter()]
-        [ValidateScript({Test-Path $_})]
+        [ValidateNotNullOrEmpty()]
         [string]
         $IsoContentsPath,
 
@@ -841,9 +847,15 @@ function New-IsoFromWim
         $AutounattendFilePath,
         
         [parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]
         $WindowsProductKey
     )
+
+    if (-Not (Test-Path -Path $IsoContentsPath))
+    {
+        $null = New-Item -Path $IsoContentsPath -Type Directory -Force
+    }
 
     $iso = Get-DiskImage -ImagePath $IsoPath -StorageType ISO
     if (! ($iso.Attached))
@@ -882,7 +894,7 @@ function New-IsoFromWim
     try
     {
         Write-Output "  Running $OscdimgPath to generate ISO at $IsoDestinationPath"
-        $sb = [scriptblock]::Create(". $OscdimgPath -u2 -l$IsoLabel -b$bootFilePath $IsoContentsPath $IsoDestinationPath")
+        $sb = [scriptblock]::Create(". '$OscdimgPath' -u2 -l$IsoLabel -b$bootFilePath $IsoContentsPath $IsoDestinationPath")
         $null = $sb.Invoke()
     }
     catch
@@ -1064,11 +1076,12 @@ function Install-WSUS
 
 <#
     .SYNOPSIS
-        Configures WSUS to download only Windows 2016 & 2012 R2 updates.
+        Configures WSUS to download specific product updates.
 
     .DESCRIPTION
-        This function will remove all products but Windows 2016 & 2012 R2 from the WSUS configuration.
-        This is a temporary function that will be replaced with something more fully-featured.
+        This function will remove all products but the ones specified in the ProductIDList parameter 
+        from the WSUS configuration. ProductIDList below contains Windows Server 2019 & Windows Server
+        2016.
 
     .Example
         Set-WsusConfiguration
@@ -1079,7 +1092,7 @@ function Set-WsusConfiguration
     (
         [Parameter()]
         [string[]]
-        $ProductIDList = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
     
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
@@ -1106,7 +1119,7 @@ function Set-WsusConfiguration
         This function will approve all non-superseded (latest) updates for the All Computers group for any 
         WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be 
         exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName 
-        and Windows Server 2016 & 2012 R2.
+        and Windows Server 2019 & 2016.
 
     .Example
         Set-EnabledProductUpdateApproval
@@ -1121,10 +1134,18 @@ function Set-EnabledProductUpdateApproval
 
         [Parameter()]
         [string[]]
-        $ProductIDList  = @("569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5","d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList  = @("f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
+    
+    $wsusSubscription = $wsusServer.GetSubscription()
+    $wsusSubscription.StartSynchronization()
+    while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+    {
+        Start-Sleep -Seconds 5
+        Write-Output $wsusSubscription.GetSynchronizationProgress()
+    }
 
     Write-Verbose "Gathering updates, this will take some time"
     $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
