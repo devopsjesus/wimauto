@@ -1,4 +1,4 @@
-﻿function Invoke-BuildUpdate
+function Invoke-BuildUpdate
 {
     param
     (

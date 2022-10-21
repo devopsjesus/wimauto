@@ -1,4 +1,4 @@
-﻿#requires -RunAsAdministrator
+#requires -RunAsAdministrator
 $workspacePath     = "C:\wimauto"
 $ServerVersion     = "Microsoft Server operating system-21H2"
 $WimAutoModulePath = "$workspacePath\modules\wimauto\wimauto.psd1"
