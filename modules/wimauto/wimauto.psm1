@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion,
 
@@ -215,9 +215,16 @@
     {
         if (! $WindowsProductKey)
         {
-            $unattendDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\System32\Sysprep\unattend.xml"
             Write-Output "  Injecting $UnattendFilePath to $unattendDestinationPath"
             $kmsActivationKeys = @(
+                @{
+                    Name = "Windows Server 2022 Datacenter"
+                    Key  = "WX4NM-KYWYW-QJJR4-XV3QB-6VM33"
+                }
+                @{
+                    Name = "Windows Server 2022 Standard"
+                    Key  = "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"
+                }
                 @{
                     Name = "Windows Server 2019 Datacenter"
                     Key  = "WMDGN-G9PQG-XVVXX-R3X43-63DFG"
@@ -254,6 +261,7 @@
         [xml]$unattendContents = Get-Content -Path $UnattendFilePath
         $unattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.InnerText = $WindowsProductKey })
 
+        $unattendDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\System32\Sysprep\unattend.xml"
         Write-Verbose "Saving $UnattendFilePath with Product key ($WindowsProductKey) injected."
         $unattendContents.Save($unattendDestinationPath)
     }
@@ -500,7 +508,7 @@ function Add-DriverToWim
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2019, 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2022, 2019, 2016 or 2012 as the product version to return updates.
 
     .Example
         $updateWimParams = @{
@@ -530,7 +538,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -555,13 +563,13 @@ function Install-UpdateListToWim
 
     .DESCRIPTION
         Returns an array of hashtables containing the ID and filepath of all approved, self-contained
-        updates for Windows Server 2019, 2016 or 2012.
+        updates for Windows Server 2022, 2019, 2016 or 2012.
 
     .PARAMETER WsusRepoDirectory
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2019, 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2022, 2019, 2016 or 2012 as the product version to return updates.
 
     .Example
         Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updatewim\updaterepo" -ServerVersion "Windows Server 2012 R2"
@@ -575,7 +583,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -588,6 +596,11 @@ function Get-SelfContainedApprovedUpdateFileList
     if ("NotReady" -in $approvedServerVersionUpdates.Update.State)
     {
         throw "Not all updates are finished downloading. Please try again later :)"
+    }
+
+    if ($approvedServerVersionUpdates.Count -eq 0)
+    {
+        throw "No updates to approve were found for '$ServerVersion'. Please try a different Version."
     }
 
     $supportedUpdates = $approvedServerVersionUpdates.Update.GetInstallableItems().Files.Where({$_.Type -eq "SelfContained" -or $_.Type -eq "None"})
@@ -875,11 +888,11 @@ function New-IsoFromWim
     $null = Dismount-DiskImage -ImagePath $IsoPath -ErrorAction Stop
 
     $autounattendDestinationPath = Join-Path -Path $IsoContentsPath -ChildPath "Autounattend.xml"
-    Write-Verbose "Injecting $AutounattendFilePath to $autounattendDestinationPath"
+    Write-Output "Injecting $AutounattendFilePath to $autounattendDestinationPath"
     [xml]$autounattendContents = Get-Content -Path $AutounattendFilePath
     $autounattendContents.GetElementsByTagName("ProductKey").ForEach({ $_.Key = $WindowsProductKey })
 
-    Write-Verbose "Saving $AutounattendFilePath with $WindowsProductKey injected."
+    Write-Output "Saving $AutounattendFilePath with $WindowsProductKey injected."
     $autounattendContents.Save($autounattendDestinationPath)
 
     #Copy-Item -Path $WimPath -Destination (Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim") -Force
@@ -894,7 +907,7 @@ function New-IsoFromWim
     try
     {
         Write-Output "  Running $OscdimgPath to generate ISO at $IsoDestinationPath"
-        $sb = [scriptblock]::Create(". '$OscdimgPath' -u2 -l$IsoLabel -b$bootFilePath $IsoContentsPath $IsoDestinationPath")
+        $sb = [scriptblock]::Create(". '$OscdimgPath' -u2 -b$bootFilePath $IsoContentsPath $IsoDestinationPath")
         $null = $sb.Invoke()
     }
     catch
@@ -1080,9 +1093,8 @@ function Install-WSUS
 
     .DESCRIPTION
         This function will remove all products but the ones specified in the ProductIDList parameter 
-        from the WSUS configuration. ProductIDList below contains Windows Server 2019 & Windows Server
-        2016.
-
+        from the WSUS configuration. ProductIDList below contains Windows Server 2022 (21H2), 2019 & 2016.
+        ProductID for Microsoft Server operating system-22H2 is 2c7888b6-f9e9-4ee9-87af-a77705193893
     .Example
         Set-WsusConfiguration
 #>
@@ -1092,7 +1104,7 @@ function Set-WsusConfiguration
     (
         [Parameter()]
         [string[]]
-        $ProductIDList = @("f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
     
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
@@ -1119,7 +1131,7 @@ function Set-WsusConfiguration
         This function will approve all non-superseded (latest) updates for the All Computers group for any 
         WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be 
         exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName 
-        and Windows Server 2019 & 2016.
+        and Windows Server 2022, 2019 & 2016.
 
     .Example
         Set-EnabledProductUpdateApproval
@@ -1134,7 +1146,7 @@ function Set-EnabledProductUpdateApproval
 
         [Parameter()]
         [string[]]
-        $ProductIDList  = @("f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530

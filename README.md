@@ -8,11 +8,11 @@
    1. Run Set-WsusConfiguration
    1. Run Set-EnabledProductUpdateApproval
       1. This will take some time as it gathers the product updates and filters them
-1. Download Windows 2019 ISO
+1. Download desired Windows ISO and copy into the workspace directory
 1. To obtain oscdimg.exe
    1. Download [WADK](https://go.microsoft.com/fwlink/?linkid=2196127)
       1. Select only 'Deployment Tools' feature to install
-      1. Either copy the exe to workspace, and/or update path in build params ($buildParams.OscdimgPath)
+      1. Either copy the exe to workspace, and/or update path in build params ($isoSettings.OscdimgPath)
 
 ## Operations
 1. Modify the updateWim.ps1 wrapper script as necessary
