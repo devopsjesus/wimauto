@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Upload Repo as Artifact
+      - name: Upload Repo as Artifact
         uses: actions/upload-artifact@v2
         with:
           name: wimauto

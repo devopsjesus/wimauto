@@ -1,6 +1,6 @@
-﻿#requires -RunAsAdministrator
-$workspacePath     = "C:\workspace"
-$ServerVersion     = "Windows Server 2019"
+#requires -RunAsAdministrator
+$workspacePath     = "C:\wimauto"
+$ServerVersion     = "Microsoft Server operating system-21H2"
 $WimAutoModulePath = "$workspacePath\modules\wimauto\wimauto.psd1"
 
 Get-Module wimauto | Remove-Module -ErrorAction Ignore
@@ -26,21 +26,29 @@ $vhdSettings = @{
 }
 
 $isoSettings = @{
-    OscdimgPath        = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe"
+    OscdimgPath        = "$WorkspacePath\oscdimg\oscdimg.exe"
     IsoContentsPath    = "$WorkspacePath\ISOContents"
-    IsoDestinationPath = "$WorkspacePath\Win2K19Std-$(Get-Date -Format yyyyMMdd).iso"
+    IsoDestinationPath = "$WorkspacePath\Win2K22Std-$(Get-Date -Format yyyyMMdd).iso"
 }
 
 $options = @{
-    CopyWimFromIso    = $false
-    InjectUpdates     = $true
+    CopyWimFromIso    = $true
+    InjectUpdates     = $false
     InjectDrivers     = $false
     InjectAnswerFiles = $true
     GenerateVHDx      = $false
     GenerateIso       = $true
 }
 
-if ($ServerVersion -eq "Windows Server 2019")
+if ($ServerVersion -eq "Microsoft Server operating system-21H2")
+{
+    $buildParams += @{
+        IsoPath            = "$workspacePath\ISOs\en-us_windows_server_2022_updated_aug_2022_x64_dvd_8b65e57f.iso"
+        WimDestinationPath = "$workspacePath\wimrepo\win2022\install.wim"
+        ExportedWimPath    = "$workspacePath\wimrepo\win2022\install.optimized.wim"
+    }
+}
+elseif ($ServerVersion -eq "Windows Server 2019")
 {
     $buildParams += @{
         IsoPath            = "$workspacePath\ISOs\en-us_windows_server_2019_updated_aug_2021_x64_dvd_a6431a28.iso"
