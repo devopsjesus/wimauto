@@ -46,12 +46,12 @@
         [parameter(<#ParameterSetName = "AnswerFileInjection"#>)]
         [string]
         $WindowsProductKey,
-    
+
         [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
         $UnattendFilePath,
-    
+
         [parameter()]
         [ValidateScript({Test-Path $_})]
         [string]
@@ -82,19 +82,19 @@
         [parameter()]
         [int64]
         $VhdSizeGB,
-    
+
         [parameter()]
         [switch]
         $InstallWSUS,
-    
+
         [parameter()]
         [switch]
         $CopyWimFromIso = $false,
-    
+
         [parameter(<#ParameterSetName = "UpdateInjection"#>)]
         [switch]
         $InjectUpdates,
-    
+
         [parameter(<#ParameterSetName = "DriverInjection"#>)]
         [switch]
         $InjectDrivers,
@@ -102,16 +102,16 @@
         [parameter(<#ParameterSetName = "AnswerFileInjection"#>)]
         [switch]
         $InjectAnswerFiles,
-    
+
         [parameter(<#ParameterSetName = "VHDxGeneration"#>)]
         [switch]
         $GenerateVHDx,
-    
+
         [parameter(<#ParameterSetName = "IsoGeneration"#>)]
         [switch]
         $GenerateIso
     )
-    
+
     if ($InstallWSUS)
     {
         #The section below will install WSUS - only needs to be run once - I've only tested installing on the deployment host.
@@ -373,11 +373,11 @@ function Copy-WimFromISO
 
     .PARAMETER ImageMountPath
         Directory to which the image will be mounted.
-        
+
     .PARAMETER UpdateFileList
-        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging, 
+        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging,
         FilePath points to the package file.
-    
+
     .EXAMPLE
         $packageToWimParams = @{
             WimPath        = $WimPath
@@ -448,10 +448,10 @@ function Add-PackageToWim
 
     .PARAMETER ImageMountPath
         Directory the image is mounted.
-        
+
     .PARAMETER DriverDirectoryPath
         Path to the folder with the drivers to inject into the wim
-    
+
     .EXAMPLE
         $packageToWimParams = @{
             ImageMountPath = $ImageMountPath
@@ -473,7 +473,7 @@ function Add-DriverToWim
     )
 
     $logPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp\InstalledDrivers-$(Get-Date -Format yyyyMMdd).log"
-    
+
     Write-Verbose "Adding Drivers from $DriverDirectoryPath to image path $ImageMountPath"
     $null = Add-WindowsDriver -Path $ImageMountPath -Driver $DriverDirectoryPath -Recurse -ErrorAction Stop -LogPath $logPath -LogLevel Errors
 }
@@ -484,7 +484,7 @@ function Add-DriverToWim
 
     .DESCRIPTION
         Mounts a Windows image (.Wim file), and applies a list of specified updates gathered from a WSUS server.
-        Update installation success is appended to a file on the root of the mounted image to keep a record of 
+        Update installation success is appended to a file on the root of the mounted image to keep a record of
         updates applied to the image.
 
     .PARAMETER WimPath
@@ -537,7 +537,7 @@ function Install-UpdateListToWim
     #requires -Module Dism
 
     $updateFileList = Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory $WsusRepoDirectory -ServerVersion $ServerVersion -ErrorAction Stop
-    
+
     Write-Verbose "Adding packages to Wim"
     $packageToWimParams = @{
         WimPath        = $WimPath
@@ -591,7 +591,7 @@ function Get-SelfContainedApprovedUpdateFileList
     }
 
     $supportedUpdates = $approvedServerVersionUpdates.Update.GetInstallableItems().Files.Where({$_.Type -eq "SelfContained" -or $_.Type -eq "None"})
-    
+
     $approvedUpdateList = $supportedUpdates.foreach({
         @{
             ID       = $_.Name
@@ -670,7 +670,7 @@ function New-VhdxFromWim
         [parameter(Mandatory)]
         [string]
         $VhdPath,
-    
+
         [parameter(Mandatory)]
         [double]
         $VhdSize,
@@ -714,7 +714,7 @@ function New-VhdxFromWim
         Write-Verbose "Clobbering existing VHD"
         Remove-Item $VhdPath -Force -ErrorAction Stop
     }
-    
+
     Write-Verbose "Creating VHD at $VhdPath"
     if ($VHDDType -eq "Dynamic")
     {
@@ -736,7 +736,7 @@ function New-VhdxFromWim
     try
         {
         #System partition
-        $systemPartition = New-Partition -DiskNumber $mountedDiskNumber -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -Size 499MB -Verbose 
+        $systemPartition = New-Partition -DiskNumber $mountedDiskNumber -GptType '{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}' -Size 499MB -Verbose
         $null = $systemPartition | Format-Volume -FileSystem FAT32 -Confirm:$false -Verbose
         $systemPartition | Set-Partition -GptType '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
 
@@ -778,7 +778,7 @@ function New-VhdxFromWim
         Creates an ISO from the contents of an existing ISO and a specified Wim.
 
     .DESCRIPTION
-        Copies the contents of a specified 
+        Copies the contents of a specified
 
     .PARAMETER OscdimgPath
         Path to the WADK utility osdcimg.exe, which can be installed via the WADK.
@@ -797,7 +797,7 @@ function New-VhdxFromWim
 
     .PARAMETER WimPath
         Path to the WIM to be applied.
-        
+
     .EXAMPLE
         $newIsoParams = @{
             OscdimgPath          = "$WorkspacePath\Oscdimg\oscdimg.exe"
@@ -845,7 +845,7 @@ function New-IsoFromWim
         [ValidateScript({Test-Path $_})]
         [string]
         $AutounattendFilePath,
-        
+
         [parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
@@ -871,7 +871,7 @@ function New-IsoFromWim
     "${driveLetter}:\Sources\install.wim" > "$Env:TEMP\xcopyexclude.txt"
     $null = & xcopy.exe "${driveLetter}:\" "$IsoContentsPath\*" /R /Y /E /EXCLUDE:"$Env:TEMP\xcopyexclude.txt"
     Remove-Item -Path "$Env:TEMP\xcopyexclude.txt" -Force -ErrorAction Stop
-    
+
     $null = Dismount-DiskImage -ImagePath $IsoPath -ErrorAction Stop
 
     $autounattendDestinationPath = Join-Path -Path $IsoContentsPath -ChildPath "Autounattend.xml"
@@ -885,7 +885,7 @@ function New-IsoFromWim
     #Copy-Item -Path $WimPath -Destination (Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim") -Force
     Write-Output "  Copying $WimPath to ISO Contents folder $(Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim")"
     $null = & xcopy.exe $WimPath "$(Join-Path -Path $IsoContentsPath -ChildPath "Sources\install.wim")*" /R /Y /E
-    
+
     $bootFilePath = Join-Path -Path $IsoContentsPath -ChildPath "efi\microsoft\boot\efisys.bin"
     if (! (Test-Path $bootFilePath))
     {
@@ -916,11 +916,11 @@ function New-IsoFromWim
 
     .PARAMETER ImageMountPath
         Directory to which the image will be mounted.
-        
+
     .PARAMETER UpdateFileList
-        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging, 
+        Hashtable array of update/packages to install. There are 2 keys: ID and FilePath. ID is used for the logging,
         FilePath points to the package file.
-    
+
     .EXAMPLE
         $wimParams = @{
             WimPath        = $WimPath
@@ -944,7 +944,7 @@ function Assert-WindowsImageMounted
         [parameter(Mandatory)]
         [int]
         $Index,
-        
+
         [parameter(Mandatory)]
         [string]
         $ImageMountPath,
@@ -956,11 +956,11 @@ function Assert-WindowsImageMounted
         [parameter(ParameterSetName='Mount')]
         [switch]
         $Mount = $true,
-        
+
         [parameter(ParameterSetName='Dismount')]
         [switch]
         $Dismount,
-        
+
         [parameter(ParameterSetName='Dismount')]
         [switch]
         $Save = $true
@@ -986,7 +986,7 @@ function Assert-WindowsImageMounted
         else
         {
             $null = & Dism.exe /Unmount-Image /MountDir:$ImageMountPath /Discard /LogLevel:1 /LogPath:$LogPath
-            
+
         }
         return
     }
@@ -1079,10 +1079,9 @@ function Install-WSUS
         Configures WSUS to download specific product updates.
 
     .DESCRIPTION
-        This function will remove all products but the ones specified in the ProductIDList parameter 
-        from the WSUS configuration. ProductIDList below contains Windows Server 2019 & Windows Server
-        2016.
-
+        This function will remove all products but the ones specified in the ProductIDList parameter
+        from the WSUS configuration. ProductIDList below contains Windows Server 2022 (21H2), 2019 & 2016.
+        ProductID for Microsoft Server operating system-22H2 is 2c7888b6-f9e9-4ee9-87af-a77705193893
     .Example
         Set-WsusConfiguration
 #>
@@ -1094,7 +1093,7 @@ function Set-WsusConfiguration
         [string[]]
         $ProductIDList = @("f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
-    
+
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
     $wsusProductList = Get-WsusProduct -UpdateServer $wsusServer
     $productsToEnable = $wsusProductList.Where({$_.Product.ID -in $ProductIDList})
@@ -1105,7 +1104,7 @@ function Set-WsusConfiguration
 
     #Enable products specified
     $productsToEnable.ForEach({Set-WsusProduct -Product $_})
-    
+
     $wsusSubscription = $wsusServer.GetSubscription()
 
     $wsusSubscription.StartSynchronization()
@@ -1116,10 +1115,10 @@ function Set-WsusConfiguration
         Enables upates for the specified WSUS product IDs.
 
     .DESCRIPTION
-        This function will approve all non-superseded (latest) updates for the All Computers group for any 
-        WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be 
-        exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName 
-        and Windows Server 2019 & 2016.
+        This function will approve all non-superseded (latest) updates for the All Computers group for any
+        WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be
+        exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName
+        and Windows Server 2022, 2019 & 2016.
 
     .Example
         Set-EnabledProductUpdateApproval
@@ -1138,7 +1137,7 @@ function Set-EnabledProductUpdateApproval
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
-    
+
     $wsusSubscription = $wsusServer.GetSubscription()
     $wsusSubscription.StartSynchronization()
     while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
@@ -1170,7 +1169,7 @@ function Set-EnabledProductUpdateApproval
     $updatesToDeny.ForEach({ Deny-WsusUpdate -Update $_ })
 
     $latestUpdates.ForEach({ Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers" })
-    
+
     $wsusSubscription = $wsusServer.GetSubscription()
 
     $wsusSubscription.StartSynchronization()
