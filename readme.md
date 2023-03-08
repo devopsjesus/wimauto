@@ -1,1 +1,0 @@
-This repo is used to create an artifact for the image-hyperv-win2019STIG repo to inject into an Azure VM that will automatically create a VHD from an ISO for on-prem use.
