@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER",  "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion,
 
@@ -537,7 +537,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -582,7 +582,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -1011,15 +1011,15 @@ function Assert-WindowsImageMounted
         $params += @{ ImagePath = $ImagePath }
         $params += @{ Index = $Index }
         Write-Verbose "Image not mounted"
-        #try
-        #{
+        try
+        {
             $null = Mount-WindowsImage @params
             $wimInfo = Get-WindowsImage -ImagePath $ImagePath -Index $Index -ErrorAction Stop
-        #}
-        #catch
-        #{
-        #    throw "Could not mount Windows image at $ImagePath. Is it in use?"
-        #}
+        }
+        catch
+        {
+           throw "Could not mount Windows image at $ImagePath. Check for invalid mount point by running 'dism /cleanup-wim'"
+        }
     }
 
     return $wimInfo
