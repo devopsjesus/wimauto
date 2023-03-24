@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion,
 
@@ -537,7 +537,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -582,7 +582,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER, Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
