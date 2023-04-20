@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD")]
         [string]
         $ServerVersion,
 
@@ -165,28 +165,7 @@
             Mount          = $true
         }
         $imageInfo = Assert-WindowsImageMounted @params
-
-        if ($serverVersion -eq "Windows Server 2012 R2")
-        {
-            Write-Output "  Adding WMF5.1 to image"
-            $updateWimParams = @{
-                WimPath        = $WimDestinationPath
-                ImageMountPath = $ImageMountPath
-                UpdateFileList = @{
-                    ID       = "Win8.1AndW2K12R2-KB3191564-x64"
-                    FilePath = $wmf51Path
-                }
-            }
-            Add-PackageToWim @updateWimParams
-
-            #Write-Output "Adding updates from Win12 updates path to image"
-            #$win12Updates = Get-ChildItem $win12UpdatesPath
-            #$win12UpdatesDestinationPath = Join-Path -Path $ImageMountPath -ChildPath "Windows\Temp"
-            #foreach ($update in $win12Updates)
-            #{
-            #    Copy-Item -Path $win12UpdatesPath -Destination $win12UpdatesDestinationPath -Force -Recurse -ErrorAction Stop
-            #}
-        }
+        Add-PackageToWim @updateWimParams
     }
 
     if ($InjectUpdates)
@@ -231,22 +210,6 @@
                 @{
                     Name = "Windows Server 2019 SERVERSTANDARD"
                     Key  = "N69G4-B89J2-4G8F4-WWYCC-J464C"
-                }
-                @{
-                    Name = "Windows Server 2016 SERVERDATACENTER"
-                    Key  = "CB7KF-BWN84-R7R2Y-793K2-8XDDG"
-                }
-                @{
-                    Name = "Windows Server 2016 SERVERSTANDARD"
-                    Key  = "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"
-                }
-                @{
-                    Name = "Windows Server 2012 R2 SERVERSTANDARD"
-                    Key  = "D2N9P-3P6X9-2R39C-7RTCD-MDVJX"
-                }
-                @{
-                    Name = "Windows Server 2012 R2 SERVERDATACENTER"
-                    Key  = "W3GGN-FT8W3-Y4M27-J84CP-Q3VJ9"
                 }
             )
 
@@ -328,8 +291,8 @@
 
     .Example
         $copyWimParams = @{
-            IsoPath            = "$workspacePath\osimages\win16\en_windows_server_2016_x64_dvd_11636701.iso"
-            WimDestinationPath = "$workspacePath\osimages\win16\install.wim"
+            IsoPath            = "$workspacePath\osimages\win19\en_windows_server_2019_x64_dvd_11636701.iso"
+            WimDestinationPath = "$workspacePath\osimages\win19\install.wim"
         }
         Copy-WimFromISO @copyWimParams
 #>
@@ -507,7 +470,7 @@ function Add-DriverToWim
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2022, 2019, 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2022 or 2019 as the product version to return updates.
 
     .Example
         $updateWimParams = @{
@@ -515,7 +478,7 @@ function Add-DriverToWim
             ImageIndex        = 1
             ImageMountPath    = "$workspacePath\osimages\mount"
             WsusRepoDirectory = "$workspacePath\updaterepo"
-            ServerVersion     = "Windows Server 2016"
+            ServerVersion     = "Windows Server 2019"
         }
         Install-UpdateListToWim @updateWimParams -Verbose
 #>
@@ -537,7 +500,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD")]
         [string]
         $ServerVersion
     )
@@ -562,16 +525,16 @@ function Install-UpdateListToWim
 
     .DESCRIPTION
         Returns an array of hashtables containing the ID and filepath of all approved, self-contained
-        updates for Windows Server 2022, 2019, 2016 or 2012.
+        updates for Windows Server 2022 or 2019.
 
     .PARAMETER WsusRepoDirectory
         Path to set as the desired WSUS Update repository.
 
     .PARAMETER ServerVersion
-        Choose either Windows Server 2022, 2019, 2016 or 2012 as the product version to return updates.
+        Choose either Windows Server 2022 or 2019 as the product version to return updates.
 
     .Example
-        Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updatewim\updaterepo" -ServerVersion "Windows Server 2012 R2"
+        Get-SelfContainedApprovedUpdateFileList -WsusRepoDirectory "$workspacePath\updatewim\updaterepo" -ServerVersion "Windows Server 2019"
 #>
 function Get-SelfContainedApprovedUpdateFileList
 {
@@ -582,7 +545,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD")]
         [string]
         $ServerVersion
     )
@@ -663,13 +626,13 @@ function Get-SelfContainedApprovedUpdateFileList
 
     .Example
         $newVHDxParams = @{
-            LocalVhdPath       = "C:\VHDs\win2016-$(Get-Date -Format yyyyMMdd).vhdx"
+            LocalVhdPath       = "C:\VHDs\win2019-$(Get-Date -Format yyyyMMdd).vhdx"
             VhdSize            = 21GB
             WindowsVolumeLabel = "OSDisk"
             VHDDType           = "Dynamic"
             BootDriveLetter    = "S"
             OSDriveLetter      = "V"
-            WimPath            = "$workspacePath\osimages\win16\install.wim"
+            WimPath            = "$workspacePath\osimages\win19\install.wim"
             ImageIndex         = 1
             ClobberVHDx        = $true
             DismountVHDx       = $true
@@ -813,10 +776,10 @@ function New-VhdxFromWim
     .EXAMPLE
         $newIsoParams = @{
             OscdimgPath          = "$WorkspacePath\Oscdimg\oscdimg.exe"
-            IsoPath              = "C:\Library\ISOs\en_windows_server_2016_updated_feb_2018_x64_dvd_11636692.iso"
+            IsoPath              = "C:\Library\ISOs\en_windows_server_2019_updated_feb_2018_x64_dvd_11636692.iso"
             IsoContentsPath      = "$WorkspacePath\ISOContents"
-            IsoLabel             = "Win2K16DC"
-            WimPath              = "$workspacePath\wimrepo\win2016\install.optimized.wim"
+            IsoLabel             = "Win2K19DC"
+            WimPath              = "$workspacePath\wimrepo\win2019\install.optimized.wim"
             IsoDestinationPath   = "$WorkspacePath\Win2K16DC-$(Get-Date -Format yyyyMMdd).iso"
         }
         New-IsoFromWim @newIsoParams
@@ -1092,7 +1055,7 @@ function Install-WSUS
 
     .DESCRIPTION
         This function will remove all products but the ones specified in the ProductIDList parameter 
-        from the WSUS configuration. ProductIDList below contains Windows Server 2022 (21H2), 2019 & 2016.
+        from the WSUS configuration. ProductIDList below contains Windows Server 2022 (22H2) & 2019.
         ProductID for Microsoft Server operating system-22H2 is 2c7888b6-f9e9-4ee9-87af-a77705193893
     .Example
         Set-WsusConfiguration
@@ -1103,7 +1066,7 @@ function Set-WsusConfiguration
     (
         [Parameter()]
         [string[]]
-        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53", "2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
@@ -1130,7 +1093,7 @@ function Set-WsusConfiguration
         This function will approve all non-superseded (latest) updates for the All Computers group for any 
         WSUS product ID passed in. It will deny any other updates, so the list of product IDs should be 
         exhaustively inclusive of all products to approve. Defaults to localhost for WsusServerName 
-        and Windows Server 2022, 2019 & 2016.
+        and Windows Server 2022 & 2019.
 
     .Example
         Set-EnabledProductUpdateApproval
@@ -1145,7 +1108,7 @@ function Set-EnabledProductUpdateApproval
 
         [Parameter()]
         [string[]]
-        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53", "2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
@@ -1169,11 +1132,6 @@ function Set-EnabledProductUpdateApproval
 
     Write-Verbose "Setting Updates for non-specified products to declined"
     $updatesToApprove = $enabledProductNames.foreach({ $productName = $_ ; $updatelist.Where({$_.Products -like "*$productName*"})})
-
-    if ("Windows Server 2016" -in $enabledProductNames)
-    {
-         $updatesToApprove = $updatesToApprove.where({$_.Update.Title -notlike "*(1709)*" -and $_.Update.Title -notlike "*(1803)*"})
-    }
 
     $latestUpdates = $updatesToApprove.where({$_.update.IsSuperseded -eq $false})
 
