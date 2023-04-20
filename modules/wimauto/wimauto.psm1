@@ -3,7 +3,7 @@
     param
     (
         [parameter()]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion,
 
@@ -537,7 +537,7 @@ function Install-UpdateListToWim
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -582,7 +582,7 @@ function Get-SelfContainedApprovedUpdateFileList
         $WsusRepoDirectory,
 
         [parameter(Mandatory)]
-        [ValidateSet("Microsoft Server operating system-21H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
+        [ValidateSet("Microsoft Server operating system-21H2", "Microsoft Server operating system-22H2", "Windows Server 2019 SERVERDATACENTER", "Windows Server 2019 SERVERSTANDARD", "Windows Server 2016", "Windows Server 2012 R2")]
         [string]
         $ServerVersion
     )
@@ -1103,7 +1103,7 @@ function Set-WsusConfiguration
     (
         [Parameter()]
         [string[]]
-        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53", "2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
@@ -1145,7 +1145,7 @@ function Set-EnabledProductUpdateApproval
 
         [Parameter()]
         [string[]]
-        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
+        $ProductIDList = @("71718f13-7324-4b0f-8f9e-2ca9dc978e53", "2c7888b6-f9e9-4ee9-87af-a77705193893", "f702a48c-919b-45d6-9aef-ca4248d50397") #, "f702a48c-919b-45d6-9aef-ca4248d50397", "569e8e8f-c6cd-42c8-92a3-efbb20a0f6f5") #, "d31bd4c3-d872-41c9-a2e7-231f372588cb")
     )
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
