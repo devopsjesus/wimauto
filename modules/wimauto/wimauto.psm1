@@ -1045,8 +1045,8 @@ function Install-WSUS
     $wsusConfiguration.AllUpdateLanguagesEnabled = $false
     $wsusConfiguration.Save()
 
-    $wsusSubscription = $wsusServer.GetSubscription()
-    $wsusSubscription.StartSynchronization()
+    # $wsusSubscription = $wsusServer.GetSubscription()
+    # $wsusSubscription.StartSynchronization()
 }
 
 <#
@@ -1080,9 +1080,9 @@ function Set-WsusConfiguration
     #Enable products specified
     $productsToEnable.ForEach({Set-WsusProduct -Product $_})
 
-    $wsusSubscription = $wsusServer.GetSubscription()
+    # $wsusSubscription = $wsusServer.GetSubscription()
 
-    $wsusSubscription.StartSynchronization()
+    # $wsusSubscription.StartSynchronization()
 }
 
 <#
@@ -1113,13 +1113,13 @@ function Set-EnabledProductUpdateApproval
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
 
-    $wsusSubscription = $wsusServer.GetSubscription()
-    $wsusSubscription.StartSynchronization()
-    while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
-    {
-        Start-Sleep -Seconds 5
-        Write-Output $wsusSubscription.GetSynchronizationProgress()
-    }
+    # $wsusSubscription = $wsusServer.GetSubscription()
+    # $wsusSubscription.StartSynchronization()
+    # while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+    # {
+    #     Start-Sleep -Seconds 5
+    #     Write-Output $wsusSubscription.GetSynchronizationProgress()
+    # }
 
     Write-Verbose "Gathering updates, this will take some time"
     $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
@@ -1140,7 +1140,7 @@ function Set-EnabledProductUpdateApproval
 
     $latestUpdates.ForEach({ Approve-WsusUpdate -Update $_ -Action Install -TargetGroupName "All Computers" })
 
-    $wsusSubscription = $wsusServer.GetSubscription()
+    # $wsusSubscription = $wsusServer.GetSubscription()
 
-    $wsusSubscription.StartSynchronization()
+    # $wsusSubscription.StartSynchronization()
 }
