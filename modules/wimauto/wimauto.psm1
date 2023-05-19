@@ -1113,13 +1113,13 @@ function Set-EnabledProductUpdateApproval
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
 
-    # $wsusSubscription = $wsusServer.GetSubscription()
-    # $wsusSubscription.StartSynchronization()
-    # while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
-    # {
-    #     Start-Sleep -Seconds 5
-    #     Write-Output $wsusSubscription.GetSynchronizationProgress()
-    # }
+    $wsusSubscription = $wsusServer.GetSubscription()
+    $wsusSubscription.StartSynchronization()
+    while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+    {
+        Start-Sleep -Seconds 5
+        Write-Output $wsusSubscription.GetSynchronizationProgress()
+    }
 
     Write-Verbose "Gathering updates, this will take some time"
     $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
