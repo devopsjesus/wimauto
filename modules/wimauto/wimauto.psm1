@@ -1045,7 +1045,18 @@ function Install-WSUS
     $wsusConfiguration.AllUpdateLanguagesEnabled = $false
     $wsusConfiguration.Save()
 
-    # $wsusSubscription = $wsusServer.GetSubscription()
+    $wsusSubscription = $wsusServer.GetSubscription()
+    #Set to autosync once a day
+    $wsusSubscription.SynchronizeAutomatically = $True
+    #set autosync to occur 10 minutes after wsus server is configured
+	$ts = New-TimeSpan -Minutes 10
+	$date=(get-date) + $ts
+	$wsusSubscription.SynchronizeAutomaticallyTimeOfDay = $date.ToUniversalTime().TimeOfDay
+	$wsusSubscription.Save()
+    $wsusSubscription.StartSynchronization()
+    Start-Sleep -Seconds 30
+    $wsusSubscription.StopSynchronization()
+
     # $wsusSubscription.StartSynchronization()
 }
 
@@ -1080,9 +1091,11 @@ function Set-WsusConfiguration
     #Enable products specified
     $productsToEnable.ForEach({Set-WsusProduct -Product $_})
 
-    # $wsusSubscription = $wsusServer.GetSubscription()
-
-    # $wsusSubscription.StartSynchronization()
+    #Start sync and stop after 30 seconds so service think sync occurred
+    $wsusSubscription = $wsusServer.GetSubscription()
+    $wsusSubscription.StartSynchronization()
+    Start-Sleep -Seconds 30
+    $wsusSubscription.StopSynchronization()
 }
 
 <#
@@ -1113,13 +1126,17 @@ function Set-EnabledProductUpdateApproval
 
     $wsusServer = Get-WsusServer -Name localhost -PortNumber 8530
 
-    # $wsusSubscription = $wsusServer.GetSubscription()
-    # $wsusSubscription.StartSynchronization()
-    # while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
-    # {
-    #     Start-Sleep -Seconds 5
-    #     Write-Output $wsusSubscription.GetSynchronizationProgress()
-    # }
+    #Start sync and stop after 30 seconds so service think sync occurred
+    $wsusSubscription = $wsusServer.GetSubscription()
+    $wsusSubscription.StartSynchronization()
+    Start-Sleep -Seconds 30
+    $wsusSubscription.StopSynchronization()
+    
+    #while (($wsusSubscription.GetSynchronizationStatus()) -eq 'Running')
+    #{
+    #    Start-Sleep -Seconds 5
+    #    Write-Output $wsusSubscription.GetSynchronizationProgress()
+    #}
 
     Write-Verbose "Gathering updates, this will take some time"
     $updateList = Get-WsusUpdate -UpdateServer $wsusServer -Status Any -Approval AnyExceptDeclined
